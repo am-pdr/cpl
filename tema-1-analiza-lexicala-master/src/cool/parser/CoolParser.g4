@@ -31,12 +31,12 @@ feature
     :
     name=ID COLON type=TYPE (ASSIGN init=expr)?
     // local                                                                               // var
-    | name=ID LPAREN (arg=formal (COMMA formal)*)? RPAREN COLON returnType=TYPE body=block   // func
+    | name=ID LPAREN (arg=formal (COMMA formal)*)? RPAREN COLON returnType=TYPE LBRACE body=expr RBRACE   // func
     ;
 
 block
     :
-    LBRACE ((local | expr) SEMI)* expr? RBRACE
+    LBRACE (exprs+=expr SEMI)* RBRACE
     ;
 
 expr
@@ -62,6 +62,3 @@ expr
     | STRING                                                                                          //# str
     | BOOL                                                                                              //# boolVal
     ;
-
-
-

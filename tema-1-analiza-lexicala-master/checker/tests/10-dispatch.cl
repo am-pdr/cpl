@@ -8,6 +8,6 @@ class A {
     };
     
     h(x : Int) : A {
-        new A@A.h(x + 1).h(x + 2)
+        a@A.h(x + 1).h(x + 2)
     };
 };

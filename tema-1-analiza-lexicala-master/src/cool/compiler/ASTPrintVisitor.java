@@ -34,10 +34,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Str str) {
-        printIndentation("string");
-        indent++;
         printIndentation(str.getToken().getText());
-        indent--;
         return null;
     }
 
@@ -141,7 +138,8 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
         printIndentation("block");
         indent++;
         for (var expr : block.expressions)
-            expr.accept(this);
+            if (expr != null)
+                expr.accept(this);
         indent--;
         return null;
     }
@@ -202,7 +200,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Assign assign) {
-        printIndentation("assign");
+        printIndentation("<-");
         indent++;
         printIndentation(assign.name.getText());
         assign.expr.accept(this);
@@ -223,10 +221,12 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(StaticDispatch staticDispatch) {
-        printIndentation("static dispatch");
+        printIndentation(".");
         indent++;
         staticDispatch.caller.accept(this);
-        printIndentation(staticDispatch.type.getText());
+        if (staticDispatch.type != null) {
+            printIndentation(staticDispatch.type.getText());
+        }
         printIndentation(staticDispatch.name.getText());
         for (var arg : staticDispatch.args)
             arg.accept(this);
@@ -248,7 +248,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(UnaryMinus op) {
-        printIndentation("-");
+        printIndentation("~");
         indent++;
         op.expr.accept(this);
         indent--;
