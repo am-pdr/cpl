@@ -97,7 +97,6 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
 
         printIndentation(method.returnType.getText());
 
-        // Daca body este Block cu un singur element literal simplu, tipareste direct valoarea
         if (method.body instanceof Block) {
             Block block = (Block) method.body;
             if (block.expressions.size() == 1) {
@@ -110,7 +109,6 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
             }
         }
 
-        // Daca body e literal simplu direct (nu block), tipareste valoarea
         if (method.body instanceof Int || method.body instanceof Str || method.body instanceof Bool || method.body instanceof Id) {
             printIndentation(method.body.getToken().getText());
         } else {
@@ -128,7 +126,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
         printIndentation(attr.name.getText());
         printIndentation(attr.type.getText());
         if (attr.init != null)
-            attr.init.accept(this);  // Aici se tipărește întreaga expresie, nu doar o valoare simplă
+            attr.init.accept(this);
         indent--;
         return null;
     }

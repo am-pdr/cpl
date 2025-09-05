@@ -78,7 +78,7 @@ class Formal extends ASTNode {
 class Local extends ASTNode {
     Token name;
     Token type;
-    Expression init; // poate fi null
+    Expression init;
 
     Local(Token token, Token name, Token type, Expression init) {
         super(token);
@@ -95,8 +95,7 @@ class Local extends ASTNode {
 class Attr extends Feature {
     Token name;
     Token type;
-    Expression init; // poate fi null
-
+    Expression init;
     Attr(Token token, Token name, Token type, Expression init) {
         super(token);
         this.name = name;
@@ -390,8 +389,8 @@ class Dispatch extends Expression {
 
 // Static dispatch: expr@Type.method(args)
 class StaticDispatch extends Expression {
-    Expression caller; // target expression (ex: e in e@T.f())
-    Token type;        // static type (optional in parser, required here)
+    Expression caller;
+    Token type;
     Token name;        // method name
     List<Expression> args;
 

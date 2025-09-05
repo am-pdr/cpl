@@ -49,13 +49,11 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
     @Override
     public ASTNode visitFeature(CoolParser.FeatureContext ctx) {
         if (ctx.LPAREN() == null) {
-            // atribut
             Token name = ctx.name;
             Token type = ctx.type;
             Expression init = ctx.init != null ? (Expression) visit(ctx.init) : null;
             return new Attr(ctx.getStart(), name, type, init);
         } else {
-            // metodă
             Token name = ctx.name;
             Token returnType = ctx.returnType;
 
@@ -104,7 +102,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("+")) {
             Expression left = (Expression) visit(ctx.expr(0));
             Expression right = (Expression) visit(ctx.expr(1));
-            // rescriere: dacă stânga e Assign, coboară operatorul în RHS-ul assign-ului
             if (left instanceof Assign a) {
                 return new Assign(ctx.getStart(), a.name, bin("+", ctx.getStart(), a.expr, right));
             }
@@ -263,7 +260,7 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
             }
             return new Block(ctx.getStart(), exprs);
         }
-        System.out.println("lipseste ceva " + ctx.start.getText() + ctx.stop.getText());
+//        System.out.println("lipseste ceva " + ctx.start.getText() + ctx.stop.getText());
         return null;
     }
 }

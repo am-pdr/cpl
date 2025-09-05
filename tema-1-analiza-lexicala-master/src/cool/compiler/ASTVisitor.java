@@ -27,9 +27,9 @@ public interface ASTVisitor<T> {
     T visit(Dispatch dispatch);            // implicit dispatch
     T visit(StaticDispatch staticDispatch); // static dispatch
 
-    // Operații
+    // Operatii
     T visit(BinaryOp op);     // +, -, *, /, <, <=, =
-    T visit(UnaryMinus op);   // -e
+    T visit(UnaryMinus op);   // ~e
     T visit(Not notExpr);
     T visit(IsVoid isVoidExpr);
 
