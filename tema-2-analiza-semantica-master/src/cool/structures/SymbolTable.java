@@ -3,9 +3,9 @@ package cool.structures;
 import java.io.File;
 
 import org.antlr.v4.runtime.*;
+import cool.parser.*;
 
 import cool.compiler.Compiler;
-import cool.parser.CoolParser;
 
 public class SymbolTable {
     public static Scope globals;
@@ -47,8 +47,8 @@ public class SymbolTable {
         var inIntMethod = new MethodSymbol("in_int", ioClass, "Int");
 
         // parameters in methods
-        outStringMethod.add(new IdSymbol("x", "String"));
-        outIntMethod.add(new IdSymbol("x", "String"));
+        outStringMethod.add(new IdSymbol("x", stringClass));
+        outIntMethod.add(new IdSymbol("x", stringClass));
 
         ioClass.add(outStringMethod);
         ioClass.add(outIntMethod);
@@ -61,9 +61,9 @@ public class SymbolTable {
         var substrMethod = new MethodSymbol("substr", stringClass, "String");
 
         // parameters in methods
-        concatMethod.add(new IdSymbol("s", "String"));
-        substrMethod.add(new IdSymbol("i", "Int"));
-        substrMethod.add(new IdSymbol("l", "Int"));
+        concatMethod.add(new IdSymbol("s", stringClass));
+        substrMethod.add(new IdSymbol("i", intClass));
+        substrMethod.add(new IdSymbol("l", intClass));
 
         stringClass.add(lengthMethod);
         stringClass.add(concatMethod);

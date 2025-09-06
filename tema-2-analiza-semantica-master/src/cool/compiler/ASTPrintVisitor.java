@@ -123,7 +123,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
     public Void visit(Attr attr) {
         printIndentation("attribute");
         indent++;
-        printIndentation(attr.name.getText());
+        printIndentation(attr.id.toString());
         printIndentation(attr.type.getText());
         if (attr.init != null)
             attr.init.accept(this);

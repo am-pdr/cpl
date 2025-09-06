@@ -1,5 +1,6 @@
 package cool.compiler;
 
+import cool.structures.SymbolTable;
 import org.antlr.v4.runtime.*;
 import org.antlr.v4.runtime.tree.*;
 
@@ -122,11 +123,24 @@ public class Compiler {
         ASTVisitorConstruction astBuilder = new ASTVisitorConstruction();
         ASTNode ast = astBuilder.visit(globalTree);
 
-        if (ast instanceof Program program) {
-            ASTPrintVisitor printVisitor = new ASTPrintVisitor();
-            program.accept(printVisitor);
-        } else {
-            System.err.println("Unexpected AST root node type: " + ast.getClass().getSimpleName());
+//        if (ast instanceof Program program) {
+//            ASTPrintVisitor printVisitor = new ASTPrintVisitor();
+//            program.accept(printVisitor);
+//        } else {
+//            System.err.println("Unexpected AST root node type: " + ast.getClass().getSimpleName());
+//        }
+
+        // Populate global scope.
+        SymbolTable.defineBasicClasses();
+
+        // TODO Semantic analysis
+        ast.accept(new DefinitionPassVisitor());
+        ast.accept(new ResolutionPassVisitor());
+
+        if (SymbolTable.hasSemanticErrors()) {
+            System.err.println("Compilation halted");
+            return;
         }
+
     }
 }

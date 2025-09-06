@@ -1,17 +1,32 @@
 package cool.compiler;
+import cool.structures.IdSymbol;
+import cool.structures.Symbol;
+import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import java.util.*;
 
 public abstract class ASTNode {
     protected Token token;
+    protected ParserRuleContext ctx;
+    protected Symbol symbol;
 
-    ASTNode(Token token) {
+    public Symbol getSymbol() {
+        return symbol;
+    }
+
+    public void setSymbol(Symbol symbol) {
+        this.symbol = symbol;
+    }
+
+    ASTNode(ParserRuleContext ctx, Token token)  {
+        this.ctx = ctx;
         this.token = token;
     }
 
     Token getToken() {
         return token;
     }
+    ParserRuleContext getCtx() { return ctx; }
 
     public <T> T accept(ASTVisitor<T> visitor) {
         return null;
@@ -19,14 +34,14 @@ public abstract class ASTNode {
 }
 
 abstract class Expression extends ASTNode {
-    Expression(Token token) {
-        super(token);
+    Expression(ParserRuleContext ctx, Token token) {
+        super(ctx, token);
     }
 }
 
 class Feature extends ASTNode {
-    Feature(Token token) {
-        super(token);
+    Feature(ParserRuleContext ctx, Token token) {
+        super(ctx, token);
     }
 }
 
@@ -35,8 +50,8 @@ class Class extends ASTNode {
     Token inherit;
     LinkedList<Feature> features;
 
-    Class(Token token, Token type, Token inherit, LinkedList<Feature> features) {
-        super(token);
+    Class(ParserRuleContext ctx, Token token, Token type, Token inherit, LinkedList<Feature> features) {
+        super(ctx, token);
         this.type = type;
         this.inherit = inherit;
         this.features = features;
@@ -50,8 +65,8 @@ class Class extends ASTNode {
 class Program extends ASTNode {
     List<Class> classes;
 
-    Program(Token token, List<Class> classes) {
-        super(token);
+    Program(ParserRuleContext ctx, Token token, List<Class> classes) {
+        super(ctx, token);
         this.classes = classes;
     }
 
@@ -61,13 +76,13 @@ class Program extends ASTNode {
 }
 
 class Formal extends ASTNode {
-    Token name;
+    Id id;
     Token type;
 
-    Formal(Token token, Token name, Token type) {
-        super(token);
+    Formal(ParserRuleContext ctx, Id id, Token type) {
+        super(ctx, id.getToken());
         this.type = type;
-        this.name = name;
+        this.id = id;
     }
 
     public <T> T accept(ASTVisitor<T> visitor) {
@@ -80,8 +95,8 @@ class Local extends ASTNode {
     Token type;
     Expression init;
 
-    Local(Token token, Token name, Token type, Expression init) {
-        super(token);
+    Local(ParserRuleContext ctx, Token token, Token name, Token type, Expression init) {
+        super(ctx, token);
         this.name = name;
         this.type = type;
         this.init = init;
@@ -93,12 +108,12 @@ class Local extends ASTNode {
 }
 
 class Attr extends Feature {
-    Token name;
+    Id id;
     Token type;
     Expression init;
-    Attr(Token token, Token name, Token type, Expression init) {
-        super(token);
-        this.name = name;
+    Attr(ParserRuleContext ctx, Id id, Token type, Expression init) {
+        super(ctx, id.getToken());
+        this.id = id;
         this.type = type;
         this.init = init;
     }
@@ -109,14 +124,14 @@ class Attr extends Feature {
 }
 
 class Method extends Feature {
-    Token name;
+    Id id;
     List<Formal> formals;
     Token returnType;
     Expression body;
 
-    Method(Token token, Token name, List<Formal> formals, Token returnType, Expression body) {
-        super(token);
-        this.name = name;
+    Method(ParserRuleContext ctx, Id id, List<Formal> formals, Token returnType, Expression body) {
+        super(ctx, id.getToken());
+        this.id = id;
         this.formals = formals;
         this.returnType = returnType;
         this.body = body;
@@ -131,8 +146,8 @@ class Assign extends Expression {
     Token name;
     Expression expr;
 
-    Assign(Token token, Token name, Expression expr) {
-        super(token);
+    Assign(ParserRuleContext ctx, Token token, Token name, Expression expr) {
+        super(ctx, token);
         this.name = name;
         this.expr = expr;
     }
@@ -143,8 +158,18 @@ class Assign extends Expression {
 }
 
 class Id extends Expression {
-    Id(Token token) {
-        super(token);
+    private IdSymbol symbol;
+    Id(ParserRuleContext ctx, Token token) {
+        super(ctx, token);
+    }
+
+    @Override
+    public IdSymbol getSymbol() {
+        return symbol;
+    }
+
+    public void setSymbol(IdSymbol symbol) {
+        this.symbol = symbol;
     }
 
     public <T> T accept(ASTVisitor<T> visitor) {
@@ -153,8 +178,8 @@ class Id extends Expression {
 }
 
 class Int extends Expression {
-    Int(Token token) {
-        super(token);
+    Int(ParserRuleContext ctx, Token token) {
+        super(ctx, token);
     }
 
     public <T> T accept(ASTVisitor<T> visitor) {
@@ -163,8 +188,8 @@ class Int extends Expression {
 }
 
 class Str extends Expression {
-    Str(Token token) {
-        super(token);
+    Str(ParserRuleContext ctx, Token token) {
+        super(ctx, token);
     }
 
     public <T> T accept(ASTVisitor<T> visitor) {
@@ -173,7 +198,7 @@ class Str extends Expression {
 }
 
 class Bool extends Expression {
-    Bool(Token token) { super(token); }
+    Bool(ParserRuleContext ctx, Token token) { super(ctx, token); }
 
     public <T> T accept(ASTVisitor<T> visitor) {
         return visitor.visit(this);
@@ -183,8 +208,8 @@ class Bool extends Expression {
 class Block extends Expression {
     List<Expression> expressions;
 
-    public Block(Token token, List<Expression> expressions) {
-        super(token);
+    public Block(ParserRuleContext ctx, Token token, List<Expression> expressions) {
+        super(ctx, token);
         this.expressions = expressions;
     }
     public <T> T accept(ASTVisitor<T> visitor) {
@@ -196,8 +221,8 @@ class Let extends Expression {
     List<Local> localVars;
     Expression body;
 
-    Let(Token token, List<Local> localVars, Expression body) {
-        super(token);
+    Let(ParserRuleContext ctx, Token token, List<Local> localVars, Expression body) {
+        super(ctx, token);
         this.localVars = localVars;
         this.body = body;
     }
@@ -212,11 +237,12 @@ class If extends Expression {
     Expression thenBranch;
     Expression elseBranch;
 
-    If(Expression cond,
+    If(ParserRuleContext ctx,
+       Expression cond,
        Expression thenBranch,
        Expression elseBranch,
        Token start) {
-        super(start);
+        super(ctx, start);
         this.cond = cond;
         this.thenBranch = thenBranch;
         this.elseBranch = elseBranch;
@@ -231,8 +257,8 @@ class While extends Expression {
     Expression cond;
     Expression body;
 
-    While(Token token, Expression cond, Expression body) {
-        super(token);
+    While(ParserRuleContext ctx, Token token, Expression cond, Expression body) {
+        super(ctx, token);
         this.cond = cond;
         this.body = body;
     }
@@ -245,8 +271,8 @@ class While extends Expression {
 class New extends Expression {
     Token type;
 
-    New(Token token, Token type) {
-        super(token);
+    New(ParserRuleContext ctx, Token token, Token type) {
+        super(ctx, token);
         this.type = type;
     }
 
@@ -258,8 +284,8 @@ class New extends Expression {
 class IsVoid extends Expression {
     Expression expr;
 
-    IsVoid(Token token, Expression expr) {
-        super(token);
+    IsVoid(ParserRuleContext ctx, Token token, Expression expr) {
+        super(ctx, token);
         this.expr = expr;
     }
 
@@ -271,8 +297,8 @@ class IsVoid extends Expression {
 class Paren extends Expression {
     Expression expr;
 
-    public Paren(Token token, Expression expr) {
-        super(token);
+    public Paren(ParserRuleContext ctx, Token token, Expression expr) {
+        super(ctx, token);
         this.expr = expr;
     }
 
@@ -284,8 +310,8 @@ class Paren extends Expression {
 class Not extends Expression {
     Expression expr;
 
-    Not(Token token, Expression expr) {
-        super(token);
+    Not(ParserRuleContext ctx, Token token, Expression expr) {
+        super(ctx, token);
         this.expr = expr;
     }
 
@@ -297,8 +323,8 @@ class Not extends Expression {
 class Neg extends Expression {
     Expression expr;
 
-    Neg(Token token, Expression expr) {
-        super(token);
+    Neg(ParserRuleContext ctx, Token token, Expression expr) {
+        super(ctx, token);
         this.expr = expr;
     }
 
@@ -310,8 +336,8 @@ class Neg extends Expression {
 class UnaryMinus extends Expression {
     Expression expr;
 
-    UnaryMinus(Token token, Expression expr) {
-        super(token);
+    UnaryMinus(ParserRuleContext ctx, Token token, Expression expr) {
+        super(ctx, token);
         this.expr = expr;
     }
 
@@ -326,8 +352,8 @@ class BinaryOp extends Expression {
     Expression left;
     Expression right;
 
-    BinaryOp(Token token, Expression left, String op, Expression right) {
-        super(token);
+    BinaryOp(ParserRuleContext ctx, Token token, Expression left, String op, Expression right) {
+        super(ctx, token);
         this.left = left;
         this.op = op;
         this.right = right;
@@ -342,8 +368,8 @@ class Case extends Expression {
     Expression expr;
     List<CaseBranch> branches;
 
-    Case(Token token, Expression expr, List<CaseBranch> branches) {
-        super(token);
+    Case(ParserRuleContext ctx, Token token, Expression expr, List<CaseBranch> branches) {
+        super(ctx, token);
         this.expr = expr;
         this.branches = branches;
     }
@@ -358,8 +384,8 @@ class CaseBranch extends ASTNode {
     Token type;
     Expression expr;
 
-    CaseBranch(Token token, Token name, Token type, Expression expr) {
-        super(token);
+    CaseBranch(ParserRuleContext ctx, Token token, Token name, Token type, Expression expr) {
+        super(ctx, token);
         this.name = name;
         this.type = type;
         this.expr = expr;
@@ -375,8 +401,8 @@ class Dispatch extends Expression {
     Token name;
     List<Expression> args;
 
-    Dispatch(Token token, Token name, List<Expression> args) {
-        super(token);
+    Dispatch(ParserRuleContext ctx, Token token, Token name, List<Expression> args) {
+        super(ctx, token);
         this.name = name;
         this.args = args;
     }
@@ -394,8 +420,8 @@ class StaticDispatch extends Expression {
     Token name;        // method name
     List<Expression> args;
 
-    StaticDispatch(Token token, Expression caller, Token type, Token name, List<Expression> args) {
-        super(token);
+    StaticDispatch(ParserRuleContext ctx, Token token, Expression caller, Token type, Token name, List<Expression> args) {
+        super(ctx, token);
         this.caller = caller;
         this.type = type;
         this.name = name;

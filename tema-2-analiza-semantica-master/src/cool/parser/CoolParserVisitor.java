@@ -1,4 +1,4 @@
-// Generated from A:/UPB_Files/Anul_4/sem I/CPL/TEME/tema-1-analiza-lexicala-master/src/cool/parser/CoolParser.g4 by ANTLR 4.13.2
+// Generated from A:/UPB_Files/Anul_4/sem I/CPL/TEME/tema-2-analiza-semantica-master/src/cool/parser/CoolParser.g4 by ANTLR 4.13.2
 
     package cool.parser;
 

@@ -1,32 +1,16 @@
 package cool.compiler;
 
+import cool.structures.*;
+
 public class DefinitionPassVisitor implements ASTVisitor<Void> {
     private Scope currentScope = SymbolTable.globals;
+    RulesChecker validateChecks = new RulesChecker();
     private ClassSymbol currentClass;
     private MethodSymbol currentMethod;
 
     @Override
     public Void visit(Program program) {
-        // collect the names of classes
-        for (var classs : program.classes) {
-            var name = classs.type.getText();
-            if ("SELF_TYPE".equals(name)) {
-                SymbolTable.error(classs.ctx, classs.type, "Class has illegal name SELF_TYPE");
-                continue;
-            }
-            if (SymbolTable.globals.lookup(name) != null) {
-                SymbolTable.error(classs.ctx, classs.type,
-                        String.format("Class %s is redefined", name));
-                continue;
-            }
-            var classSymbol = new ClassSymbol(name, null); // parent is null for each class
-            SymbolTable.globals.add(classSymbol);   // adding the class in globals
-            classs.sym = classSymbol;
-        }
-
-        // collect features from created classes
-        for (var cls : p.classes)
-            classs.accept(this);
+        program.classes.forEach(cls -> cls.accept(this));
         return null;
     }
 
@@ -56,6 +40,14 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Formal formal) {
+        IdSymbol sym = new IdSymbol(formal.id.token.getText());
+        if(!validateChecks.checkFormalDefinition(formal, currentScope))
+            return null;
+
+        sym.setType(new ClassSymbol(formal.type.getText(), ""));
+        sym.setScope(currentScope);
+        currentScope.add(sym);
+        formal.id.accept(this);
 
         return null;
     }
@@ -67,13 +59,27 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Class classs) {
-        var classSymbol = (ClassSymbol) SymbolTable.globals.lookup(classs.type.getText());
-        var old = currentScope;
-        currentScope = classSymbol;
+        String name = classs.type.getText();
+        String parent = "Object";
+        ClassSymbol classSymbol = new ClassSymbol(name, parent);
 
-        for (var feature : classs.features) feature.accept(this);
+        // illegal name SELF_TYPE & redefinition
+        if (!validateChecks.checkClassName(classs, currentScope))
+            return null;
 
-        currentScope = old;
+        // illegal parent
+        if (classs.inherit != null) {
+            validateChecks.checkParentName(classs);
+            classSymbol.setParentName(classs.inherit.getText());
+        }
+
+        currentScope.add(classSymbol);
+        currentScope = (Scope) classSymbol;
+
+        for (var f : classs.features)
+            f.accept(this);   // atât! fără verificări specifice atributelor aici
+
+        currentScope = SymbolTable.globals;
         return null;
     }
 
@@ -86,46 +92,62 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Method method) {
-        var classs = (ClassSymbol) currentScope;
-        if (classs.getMethod(method.name.getText()) != null) {
-            SymbolTable.error(method.ctx, method.name,
-                    String.format("Class %s redefines method %s",
-                            classs.getName(), method.name.getText()));
+        MethodSymbol sym = new MethodSymbol(method.id.token.getText(), currentScope);
+        var cls = (ClassSymbol) currentScope;
+        var mName = method.id.token.getText();
+        // redefinition in the same class
+        if (!validateChecks.checkMethodDefinition(method, currentScope)) {
             return null;
         }
 
-        var methodSymbol = new MethodSymbol(method.name.getText(), method.returnType.getText(), classs);
-        classs.addMethod(methodSymbol);
+        var mSym = new MethodSymbol(mName, cls, method.returnType.getText());
+        cls.add(mSym);
+        method.id.setSymbol(mSym);
 
+        // 3) intrăm în scope-ul metodei și definim formalii (numai numele)
         var old = currentScope;
-        currentScope = methodSymbol;
+        currentScope = mSym;
 
-        for (var formal : method.formals) {
-            if ("self".equals(formal.name.getText())) {
-                SymbolTable.error(formal.ctx, formal.name,
-                        String.format("Method %s of class %s has formal parameter with illegal name self",
-                                methodSymbol.getName(), classs.getName()));
-                continue;
-            }
-            if ("SELF_TYPE".equals(f.type.getText())) {
-                SymbolTable.error(f.ctx, f.type,
-                        String.format("Method %s of class %s has formal parameter %s with illegal type SELF_TYPE",
-                                ms.getName(), cls.getName(), f.name.getText()));
-                continue;
-            }
-            if (!ms.add(new IdSymbol(f.name.getText(), f.type.getText()))) {
-                SymbolTable.error(f.ctx, f.name,
-                        String.format("Method %s of class %s redefines formal parameter %s",
-                                ms.getName(), cls.getName(), f.name.getText()));
-            }
+        for (var f : method.formals) {
+            f.accept(this);  // definim parametrii (doar numele și interdicțiile de nume)
         }
+
+        // 4) corpul metodei rămâne pentru type-check, nu ai erori în testul 3 aici
         currentScope = old;
+
         return null;
     }
 
     @Override
     public Void visit(Attr attr) {
+        var name = attr.id.getToken().getText();
 
+        // illegal name self
+        if ("self".equals(name)) {
+            SymbolTable.error(attr.ctx, attr.id.getToken(),
+                    "Class " + ((ClassSymbol) currentScope).getName() + " has attribute with illegal name self");
+            return null;
+        }
+
+        // redefinition
+        if (currentScope.lookup(name) instanceof IdSymbol) {
+            SymbolTable.error(attr.ctx, attr.id.getToken(),
+                    "Class " + ((ClassSymbol) currentScope).getName() + " redefines attribute " + name);
+            return null;
+        }
+
+        // redefinition of inherited attr
+
+
+        // define symbol and add in scope
+        var sym = new IdSymbol(name);           // type will be set in resolution
+        sym.setScope(currentScope);
+        sym.setScope(currentScope);
+        attr.id.setSymbol(sym);
+        currentScope.add(sym);
+
+        // initialization
+        if (attr.init != null) attr.init.accept(this);
         return null;
     }
 
