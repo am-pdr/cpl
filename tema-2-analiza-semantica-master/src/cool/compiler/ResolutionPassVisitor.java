@@ -7,6 +7,15 @@ import static cool.structures.SymbolTable.globals;
 public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     Scope currentScope = globals;
     RulesChecker validateChecker = new RulesChecker();
+
+    private ClassSymbol INT()   { return (ClassSymbol) globals.lookup("Int"); }
+    private ClassSymbol BOOL()  { return (ClassSymbol) globals.lookup("Bool"); }
+    private ClassSymbol STR()   { return (ClassSymbol) globals.lookup("String"); }
+    private boolean isInt(ClassSymbol t)  { return t != null && "Int".equals(t.getName()); }
+    private boolean isBool(ClassSymbol t) { return t != null && "Bool".equals(t.getName()); }
+    private boolean isStr(ClassSymbol t)  { return t != null && "String".equals(t.getName()); }
+    private boolean isBasic(ClassSymbol t){ return isInt(t) || isBool(t) || isStr(t); }
+
     @Override
     public ClassSymbol visit(Id id) {
         String name = id.token.getText();
@@ -33,17 +42,17 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Int integer) {
-        return null;
+        return INT();
     }
 
     @Override
     public ClassSymbol visit(Str str) {
-        return null;
+        return STR();
     }
 
     @Override
     public ClassSymbol visit(Bool bool) {
-        return null;
+        return BOOL();
     }
 
     @Override
@@ -78,7 +87,7 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             if(validateChecker.nonInheritable.contains(classs.inherit.getText()))
                 return null;
             // check the defined parent & check the cycle
-            if (!validateChecker.isParentClassDefined(classs) || !validateChecker.checkInheritanceCycle(classs))
+            if (!validateChecker.checkInheritanceCycle(classs) || !validateChecker.isParentClassDefined(classs))
                 return null;
         }
 
@@ -215,7 +224,7 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
                 if (lca == null || !lca.getName().equals(declared.getName())) {
                     var tok = attr.init.getToken();
                     SymbolTable.error(attr.ctx, tok,
-                            "Type " + exprType.getParentName() +
+                            "Type " + exprType.getName() +
                                     " of initialization expression of attribute " +
                                     attr.id.getToken().getText() +
                                     " is incompatible with declared type " + declared.getName());
@@ -224,12 +233,13 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
         }
 
         return declared;
-
     }
 
     @Override
     public ClassSymbol visit(Block block) {
-        return null;
+        ClassSymbol last = null;
+        for (var e : block.expressions) last = e.accept(this);
+        return last;
     }
 
     @Override
@@ -245,17 +255,39 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     @Override
     public ClassSymbol visit(Let let) {
         var saved = currentScope;
+        Scope s = currentScope;
 
-        // exact aceeași topologie de scope ca în DefinitionPass
-        Scope s = new DefaultScope(currentScope);
         for (var local : let.localVars) {
-            s = new DefaultScope(s);
+            // 1) evaluăm init în scopul curent (fără variabila nouă)
             currentScope = s;
-            local.accept(this);   // aici se va da "undefined type" pentru C
+            if (local.init != null) local.init.accept(this);
+
+            // 2) rezolvăm tipul declarat (doar pt. mesajele "undefined type")
+            String typeName = local.type.getText();
+            ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
+            if (declared == null) {
+                SymbolTable.error(local.ctx, local.type,
+                        "Let variable " + local.id.getToken().getText() +
+                                " has undefined type " + typeName);
+            }
+
+            // 3) abia acum introducem variabila într-un scope nou
+            Scope newScope = new DefaultScope(s);
+            currentScope = newScope;
+
+            IdSymbol sym = local.id.getSymbol();
+            if (sym != null) {
+                sym.setScope(newScope);
+                newScope.add(sym);
+                if (declared != null) sym.setType(declared);
+            }
+
+            s = newScope;
         }
 
+        // 4) corpul se evaluează în ultimul scope
         currentScope = s;
-        ClassSymbol bodyType = let.body != null ? let.body.accept(this) : null;
+        ClassSymbol bodyType = (let.body != null) ? let.body.accept(this) : null;
 
         currentScope = saved;
         return bodyType;
@@ -317,7 +349,46 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Assign assign) {
-        return null;
+        String lhsName = assign.name.getText();
+
+        // 1) self <- ...
+        if ("self".equals(lhsName)) {
+            SymbolTable.error(assign.ctx, assign.name, "Cannot assign to self");
+            // tot vizităm dreapta ca să generăm erori din interior, dacă sunt
+            return (assign.expr != null) ? assign.expr.accept(this) : null;
+        }
+
+        // 2) rezolvă identificatorul din stânga
+        Symbol s = currentScope.lookup(lhsName);
+        if (!(s instanceof IdSymbol)) {
+            SymbolTable.error(assign.ctx, assign.name, "Undefined identifier " + lhsName);
+            if (assign.expr != null) assign.expr.accept(this);
+            return null;
+        }
+
+        IdSymbol idSym = (IdSymbol) s;
+        ClassSymbol declared = idSym.getType();
+
+        // 3) tipul expresiei din dreapta
+        ClassSymbol rhs = (assign.expr != null) ? assign.expr.accept(this) : null;
+
+        // dacă nu avem tipuri (deja s-au raportat alte erori), ne oprim elegant
+        if (declared == null || rhs == null) {
+            return rhs;
+        }
+
+        // 4) compatibilitate: RHS trebuie să fie subtip al LHS
+        ClassSymbol lca = validateChecker.getCommonParrent(declared, rhs, currentScope);
+        if (lca == null || !declared.getName().equals(lca.getName())) {
+            // raportează pe tokenul expresiei din dreapta (exact ca în referință)
+            SymbolTable.error(assign.ctx, assign.expr.getToken(),
+                    "Type " + rhs.getName() +
+                            " of assigned expression is incompatible with declared type " +
+                            declared.getName() + " of identifier " + lhsName);
+        }
+
+        // 5) tipul unei atribuiri este tipul expresiei din dreapta
+        return rhs;
     }
 
     @Override
@@ -332,22 +403,72 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(BinaryOp op) {
-        return null;
-    }
+        var lt = (op.left  != null) ? op.left.accept(this)  : null;
+        var rt = (op.right != null) ? op.right.accept(this) : null;
+        String sop = op.op; // "+", "-", "*", "/", "<", "<=", "="
 
-    @Override
-    public ClassSymbol visit(UnaryMinus op) {
-        return null;
+        // + - * /
+        if (sop.equals("+") || sop.equals("-") || sop.equals("*") || sop.equals("/")) {
+            if (lt != null && !isInt(lt)) {
+                SymbolTable.error(op.ctx, op.left.getToken(),
+                        "Operand of " + sop + " has type " + lt.getName() + " instead of Int");
+            }
+            if (rt != null && !isInt(rt)) {
+                SymbolTable.error(op.ctx, op.right.getToken(),
+                        "Operand of " + sop + " has type " + rt.getName() + " instead of Int");
+            }
+            return INT();
+        }
+
+        // < și <= : ambii Int, rezultat Bool
+        if (sop.equals("<") || sop.equals("<=")) {
+            if (lt != null && !isInt(lt)) {
+                SymbolTable.error(op.ctx, op.left.getToken(),
+                        "Operand of " + sop + " has type " + lt.getName() + " instead of Int");
+            }
+            if (rt != null && !isInt(rt)) {
+                SymbolTable.error(op.ctx, op.right.getToken(),
+                        "Operand of " + sop + " has type " + rt.getName() + " instead of Int");
+            }
+            return BOOL();
+        }
+
+        // = : dacă oricare operand e tip de bază, ambele trebuie să fie ACELAȘI tip de bază
+        if (sop.equals("=")) {
+            boolean lb = isBasic(lt), rb = isBasic(rt);
+            if (lb || rb) {
+                boolean ok = (isInt(lt) && isInt(rt)) ||
+                        (isBool(lt) && isBool(rt)) ||
+                        (isStr(lt) && isStr(rt));
+                if (!ok) {
+                    // plasăm eroarea pe începutul expresiei (merge și pe left.getToken())
+                    SymbolTable.error(op.ctx, op.getToken(),
+                            "Cannot compare " + (lt == null ? "Object" : lt.getName()) +
+                                    " with " + (rt == null ? "Object" : rt.getName()));
+                }
+            }
+            // pentru tipuri non-basic (A,B etc.) e permis; rezultatul e Bool
+            return BOOL();
+        }
+
+        // fallback (nu ar trebui folosit la 07–08)
+        return INT();
     }
 
     @Override
     public ClassSymbol visit(Not notExpr) {
-        return null;
+        ClassSymbol t = (notExpr.expr != null) ? notExpr.expr.accept(this) : null;
+        if (t != null && !isBool(t)) {
+            SymbolTable.error(notExpr.ctx, notExpr.expr.getToken(),
+                    "Operand of not has type " + t.getName() + " instead of Bool");
+        }
+        return BOOL();
     }
 
     @Override
     public ClassSymbol visit(IsVoid isVoidExpr) {
-        return null;
+        if (isVoidExpr.expr != null) isVoidExpr.expr.accept(this);
+        return BOOL();
     }
 
     @Override
@@ -357,11 +478,16 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Paren paren) {
-        return null;
+       return (paren.expr!=null) ? paren.expr.accept(this) : null;
     }
 
     @Override
     public ClassSymbol visit(Neg negExpr) {
-        return null;
+        ClassSymbol t = (negExpr.expr != null) ? negExpr.expr.accept(this) : null;
+        if (t != null && !isInt(t)) {
+            SymbolTable.error(negExpr.ctx, negExpr.expr.getToken(),
+                    "Operand of ~ has type " + t.getName() + " instead of Int");
+        }
+        return INT();
     }
 }

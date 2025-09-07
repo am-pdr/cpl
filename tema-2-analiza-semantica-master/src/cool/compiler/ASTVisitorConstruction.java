@@ -88,185 +88,150 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
     }
 
     @Override
-    public ASTNode visitExpr(CoolParser.ExprContext ctx) {
-        if (ctx.INT() != null) {
-            return new Int(ctx, ctx.getStart());
+    public ASTNode visitParenthesis(CoolParser.ParenthesisContext ctx) {
+        return (Expression) visit(ctx.e); // sau new Paren(...)
+    }
+
+    @Override
+    public ASTNode visitMulDiv(CoolParser.MulDivContext ctx) {
+        Expression l = (Expression) visit(ctx.expr(0));
+        Expression r = (Expression) visit(ctx.expr(1));
+        String op = (ctx.MULT()!=null) ? "*" : "/";
+        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+    }
+
+    @Override
+    public ASTNode visitAddSub(CoolParser.AddSubContext ctx) {
+        Expression l = (Expression) visit(ctx.expr(0));
+        Expression r = (Expression) visit(ctx.expr(1));
+        String op = (ctx.MINUS()!=null) ? "-" : "+";
+        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+    }
+
+    @Override
+    public ASTNode visitRelational(CoolParser.RelationalContext ctx) {
+        Expression l = (Expression) visit(ctx.expr(0));
+        Expression r = (Expression) visit(ctx.expr(1));
+        String op = ctx.LT()!=null ? "<" : (ctx.LE()!=null ? "<=" : "=");
+        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+    }
+
+    @Override
+    public ASTNode visitNeg(CoolParser.NegContext ctx) {
+        return new Neg(ctx, ctx.getStart(), (Expression) visit(ctx.e));
+    }
+
+    @Override
+    public ASTNode visitNot(CoolParser.NotContext ctx) {
+        return new Not(ctx, ctx.getStart(), (Expression) visit(ctx.e));
+    }
+
+    @Override
+    public ASTNode visitId(CoolParser.IdContext ctx) {
+        return new Id(ctx, ctx.ID().getSymbol());
+    }
+
+    @Override
+    public ASTNode visitInt(CoolParser.IntContext ctx) {
+        return new Int(ctx, ctx.getStart());
+    }
+
+    @Override
+    public ASTNode visitStr(CoolParser.StrContext ctx) {
+        return new Str(ctx, ctx.getStart());
+    }
+
+    @Override
+    public ASTNode visitBoolVal(CoolParser.BoolValContext ctx) {
+        return new Bool(ctx, ctx.getStart());
+    }
+
+    @Override
+    public ASTNode visitAssignVal(CoolParser.AssignValContext ctx) {
+        Token name = ctx.name;
+        Expression value = (Expression) visit(ctx.init);
+        return new Assign(ctx, ctx.getStart(), name, value);
+    }
+
+    // expr: target=expr (AT type=TYPE)? DOT id=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN  #staticDispatch
+    @Override
+    public ASTNode visitStaticDispatch(CoolParser.StaticDispatchContext ctx) {
+        Expression caller = (Expression) visit(ctx.target);
+        Token typeTok = ctx.type != null ? ctx.type : null;
+        Token methodName = ctx.id;
+
+        List<Expression> args = new ArrayList<>();
+        if (ctx.args != null) {
+            for (var a : ctx.args) args.add((Expression) visit(a));
         }
+        return new StaticDispatch(ctx, ctx.getStart(), caller, typeTok, methodName, args);
+    }
 
-        if (ctx.STRING() != null) {
-            return new Str(ctx, ctx.getStart());
+    // expr: name=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN  #dispatch
+    @Override
+    public ASTNode visitDispatch(CoolParser.DispatchContext ctx) {
+        Token name = ctx.name;
+        List<Expression> args = new ArrayList<>();
+        if (ctx.args != null) {
+            for (var a : ctx.args) args.add((Expression) visit(a));
         }
+        return new Dispatch(ctx, ctx.getStart(), name, args);
+    }
 
-        if ("true".equals(ctx.getText()) || "false".equals(ctx.getText())) {
-            return new Bool(ctx, ctx.getStart());
+    // expr: IF cond=expr THEN thenBranch=expr ELSE elseBranch=expr FI  #ifExpr
+    @Override
+    public ASTNode visitIfExpr(CoolParser.IfExprContext ctx) {
+        Expression cond = (Expression) visit(ctx.cond);
+        Expression thenB = (Expression) visit(ctx.thenBranch);
+        Expression elseB = (Expression) visit(ctx.elseBranch);
+        return new If(ctx, cond, thenB, elseB, ctx.getStart());
+    }
+
+    // expr: WHILE cond=expr LOOP whileBranch=expr POOL  #whileExpr
+    @Override
+    public ASTNode visitWhileExpr(CoolParser.WhileExprContext ctx) {
+        Expression cond = (Expression) visit(ctx.cond);
+        Expression body = (Expression) visit(ctx.whileBranch);
+        return new While(ctx, ctx.getStart(), cond, body);
+    }
+
+    // expr: block  #blockExpr  (ai deja visitBlock(CoolParser.BlockContext) definit)
+    @Override
+    public ASTNode visitBlockExpr(CoolParser.BlockExprContext ctx) {
+        return visit(ctx.block()); // folosește constructorul tău existent de Block
+    }
+
+    // expr: LET localVars+=local (...) IN exp=expr  #letExpr
+    @Override
+    public ASTNode visitLetExpr(CoolParser.LetExprContext ctx) {
+        List<Local> locals = new ArrayList<>();
+        for (var lctx : ctx.localVars) locals.add((Local) visit(lctx));
+        Expression body = (Expression) visit(ctx.exp);
+        return new Let(ctx, ctx.getStart(), locals, body);
+    }
+
+    // expr: CASE cond=expr OF (types+=formal RESULTS exprs+=expr SEMI)+ ESAC  #caseExpr
+    @Override
+    public ASTNode visitCaseExpr(CoolParser.CaseExprContext ctx) {
+        Expression cond = (Expression) visit(ctx.cond);
+        List<CaseBranch> branches = new ArrayList<>();
+        for (int i = 0; i < ctx.types.size(); i++) {
+            Formal formal = (Formal) visit(ctx.types.get(i));
+            Expression expr = (Expression) visit(ctx.exprs.get(i));
+            branches.add(new CaseBranch(ctx, formal.getToken(), formal.id.getToken(), formal.type, expr));
         }
+        return new Case(ctx, ctx.getStart(), cond, branches);
+    }
 
-        if (ctx.ID() != null && ctx.getChildCount() == 1) {
-            return new Id(ctx, ctx.ID().getSymbol());
-        }
+    // expr: NEW type=TYPE  #newExpr
+    @Override
+    public ASTNode visitNewExpr(CoolParser.NewExprContext ctx) {
+        return new New(ctx, ctx.getStart(), ctx.type);
+    }
 
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("+")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            if (left instanceof Assign a) {
-                return new Assign(ctx, ctx.getStart(), a.name, bin(ctx,"+", ctx.getStart(), a.expr, right));
-            }
-            return new BinaryOp(ctx, ctx.getStart(), left, "+", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("-")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            if (left instanceof Assign a) {
-                return new Assign(ctx, ctx.getStart(), a.name, bin(ctx,"-", ctx.getStart(), a.expr, right));
-            }
-            return new BinaryOp(ctx, ctx.getStart(), left, "-", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("*")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            if (left instanceof Assign a) {
-                return new Assign(ctx, ctx.getStart(), a.name, bin(ctx,"*", ctx.getStart(), a.expr, right));
-            }
-            return new BinaryOp(ctx, ctx.getStart(), left, "*", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("/")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            if (left instanceof Assign a) {
-                return new Assign(ctx, ctx.getStart(), a.name, bin(ctx,"/", ctx.getStart(), a.expr, right));
-            }
-            return new BinaryOp(ctx, ctx.getStart(), left, "/", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("<")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            return new BinaryOp(ctx, ctx.getStart(), left, "<", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("<=")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            return new BinaryOp(ctx, ctx.getStart(), left, "<=", right);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(1).getText().equals("=")) {
-            Expression left = (Expression) visit(ctx.expr(0));
-            Expression right = (Expression) visit(ctx.expr(1));
-            return new BinaryOp(ctx, ctx.getStart(), left, "=", right);
-        }
-
-        if (ctx.getChildCount() == 2 && ctx.getChild(0).getText().equals("~")) {
-            Expression sub = (Expression) visit(ctx.expr(0));
-            return new UnaryMinus(ctx, ctx.getStart(), sub);
-        }
-
-        if (ctx.getChildCount() == 2 && ctx.getChild(0).getText().equals("not")) {
-            Expression sub = (Expression) visit(ctx.expr(0));
-            return new Not(ctx, ctx.getStart(), sub);
-        }
-
-        if (ctx.getChildCount() == 2 && ctx.getChild(0).getText().equals("isvoid")) {
-            Expression sub = (Expression) visit(ctx.expr(0));
-            return new IsVoid(ctx, ctx.getStart(), sub);
-        }
-
-        if (ctx.getChildCount() == 3 && ctx.getChild(0).getText().equals("(")) {
-            Expression e = (Expression) visit(ctx.expr(0));
-            return e;
-        }
-
-        if (ctx.ASSIGN() != null) {
-            Token name = ctx.ID().getSymbol();
-            Expression value = (Expression) visit(ctx.init);
-            return new Assign(ctx, ctx.getStart(), name, value);
-        }
-
-        if (ctx.NEW() != null) {
-            Token type = ctx.TYPE().getSymbol();
-            return new New(ctx, ctx.getStart(), type);
-        }
-
-        // dispatch
-        if (ctx.LPAREN() != null && ctx.DOT() == null) {
-            Token name = ctx.ID().getSymbol();
-            List<Expression> args = new ArrayList<>();
-            for (var argCtx : ctx.expr()) {
-                args.add((Expression) visit(argCtx));
-            }
-            return new Dispatch(ctx, ctx.getStart(), name, args);
-        }
-
-        // static dispatch
-        if (ctx.DOT() != null) {
-            Expression caller = (Expression) visit(ctx.expr(0));
-            Token type = ctx.AT() != null ? ctx.TYPE().getSymbol() : null;
-            Token methodName = ctx.ID().getSymbol();
-
-            if (type != null && caller instanceof Id) {
-                String idName = ((Id) caller).getToken().getText();
-                String typeName = type.getText();
-                if (!typeName.isEmpty()
-                        && idName.length() == 1
-                        && idName.equals(typeName.substring(0, 1).toLowerCase())) {
-                    caller = new New(ctx, ctx.getStart(), type);
-                }
-            }
-
-            List<Expression> args = new ArrayList<>();
-            for (int i = 1; i < ctx.expr().size(); i++) {
-                args.add((Expression) visit(ctx.expr(i)));
-            }
-
-            return new StaticDispatch(ctx, ctx.getStart(), caller, type, methodName, args);
-        }
-
-        if (ctx.IF() != null) {
-            Expression cond = (Expression) visit(ctx.cond);
-            Expression thenBranch = (Expression) visit(ctx.thenBranch);
-            Expression elseBranch = (Expression) visit(ctx.elseBranch);
-            return new If(ctx, cond, thenBranch, elseBranch, ctx.getStart());
-        }
-
-        if (ctx.WHILE() != null) {
-            Expression cond = (Expression) visit(ctx.cond);
-            Expression body = (Expression) visit(ctx.whileBranch);
-            return new While(ctx, ctx.getStart(), cond, body);
-        }
-
-        if (ctx.LET() != null) {
-            List<Local> locals = new ArrayList<>();
-            for (var lctx : ctx.localVars) {
-                locals.add((Local) visit(lctx));
-            }
-            Expression expr = (Expression) visit(ctx.exp);
-            return new Let(ctx, ctx.getStart(), locals, expr);
-        }
-
-        if (ctx.CASE() != null) {
-            Expression cond = (Expression) visit(ctx.cond);
-
-            List<CaseBranch> branches = new ArrayList<>();
-            for (int i = 0; i < ctx.types.size(); i++) {
-                Formal formal = (Formal) visit(ctx.types.get(i));
-                Expression expr = (Expression) visit(ctx.exprs.get(i));
-                branches.add(new CaseBranch(ctx, formal.getToken(), formal.id.token, formal.type, expr));
-            }
-
-            return new Case(ctx, ctx.getStart(), cond, branches);
-        }
-
-        if (ctx.block() != null) {
-            List<Expression> exprs = new ArrayList<>();
-            for (var ectx : ctx.block().expr()) {
-                exprs.add((Expression) visit(ectx));
-            }
-            return new Block(ctx, ctx.getStart(), exprs);
-        }
-//        System.out.println("lipseste ceva " + ctx.start.getText() + ctx.stop.getText());
-        return null;
+    // expr: ISVOID e=expr  #isVoid
+    @Override
+    public ASTNode visitIsVoid(CoolParser.IsVoidContext ctx) {
+        return new IsVoid(ctx, ctx.getStart(), (Expression) visit(ctx.e));
     }
 }

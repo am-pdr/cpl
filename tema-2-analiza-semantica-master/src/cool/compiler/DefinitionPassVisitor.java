@@ -138,31 +138,25 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
     public Void visit(Attr attr) {
         var name = attr.id.getToken().getText();
 
-        // illegal name self
         if ("self".equals(name)) {
             SymbolTable.error(attr.ctx, attr.id.getToken(),
                     "Class " + ((ClassSymbol) currentScope).getName() + " has attribute with illegal name self");
             return null;
         }
 
-        // redefinition
-        if (currentScope.lookup(name) instanceof IdSymbol) {
+        // ATENTIE: verifica DOAR atribut local, nu lookup (care ar vedea si mostenite)
+        if (((ClassSymbol) currentScope).hasAttribute(name)) {
             SymbolTable.error(attr.ctx, attr.id.getToken(),
                     "Class " + ((ClassSymbol) currentScope).getName() + " redefines attribute " + name);
             return null;
         }
 
-        // redefinition of inherited attr
-
-
-        // define symbol and add in scope
-        var sym = new IdSymbol(name);           // type will be set in resolution
-        sym.setScope(currentScope);
+        // definire simbol
+        var sym = new IdSymbol(name);
         sym.setScope(currentScope);
         attr.id.setSymbol(sym);
         currentScope.add(sym);
 
-        // initialization
         if (attr.init != null) attr.init.accept(this);
         return null;
     }
@@ -267,12 +261,6 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(BinaryOp op) {
-
-        return null;
-    }
-
-    @Override
-    public Void visit(UnaryMinus op) { //~
 
         return null;
     }

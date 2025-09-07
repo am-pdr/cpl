@@ -40,25 +40,26 @@ block
     ;
 
 expr
-    :
-    name=ID ASSIGN init=expr                                                                   //# assignVal
-    | target=expr (AT type=TYPE)? DOT id=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN           //# staticDispatch
-    | name=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN                                         //# dispatch//
-    | IF cond=expr THEN thenBranch=expr ELSE elseBranch=expr FI                                       //# if
-    | WHILE cond=expr LOOP whileBranch=expr POOL                                                      //# while
-    | block                                                                                             //# block
-    | LET localVars+=local (COMMA localVars+=local)* IN exp=expr                                      //# let
-    | CASE cond=expr OF (types+=formal RESULTS exprs+=expr SEMI)+ ESAC                                //# case
-    | NEW type=TYPE                                                                                   //# new
-    | ISVOID e=expr                                                                                   //# isVoid
-    | left=expr (DIV | MULT) right=expr
-    | left=expr (MINUS | PLUS) right=expr
-    | NEG e=expr                                                                                      //# neg
-    | left=expr (LT | LE | EQUAL) right=expr
-    | NOT e=expr                                                                                      //# not
-    | LPAREN e=expr RPAREN                                                                            //# parenthesis
-    | ID                                                                                              //# id
-    | INT                                                                                             //# int
-    | STRING                                                                                          //# str
-    | BOOL                                                                                              //# boolVal
-    ;
+  : name=ID ASSIGN init=expr                                                                #assignVal
+  | target=expr (AT type=TYPE)? DOT id=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN   #staticDispatch
+  | name=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN                                 #dispatch
+  | IF cond=expr THEN thenBranch=expr ELSE elseBranch=expr FI                               #ifExpr
+  | WHILE cond=expr LOOP whileBranch=expr POOL                                              #whileExpr
+  | block                                                                                   #blockExpr
+  | LET localVars+=local (COMMA localVars+=local)* IN exp=expr                              #letExpr
+  | CASE cond=expr OF (types+=formal RESULTS exprs+=expr SEMI)+ ESAC                        #caseExpr
+  | NEW type=TYPE                                                                           #newExpr
+
+  | ISVOID e=expr                                                                           #isVoid
+  | NEG e=expr                                                                              #neg
+  | LPAREN e=expr RPAREN                                                                    #parenthesis
+  | ID                                                                                      #id
+  | INT                                                                                     #int
+  | STRING                                                                                  #str
+  | BOOL                                                                                    #boolVal
+
+  | left=expr (DIV | MULT) right=expr                                                       #mulDiv
+  | left=expr (MINUS | PLUS) right=expr                                                     #addSub
+  | left=expr (LT | LE | EQUAL) right=expr                                                  #relational
+  | NOT e=expr                                                                              #not
+  ;

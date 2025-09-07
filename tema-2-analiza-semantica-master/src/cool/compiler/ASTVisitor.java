@@ -29,7 +29,6 @@ public interface ASTVisitor<T> {
 
     // Operatii
     T visit(BinaryOp op);     // +, -, *, /, <, <=, =
-    T visit(UnaryMinus op);   // ~e
     T visit(Not notExpr);
     T visit(IsVoid isVoidExpr);
 

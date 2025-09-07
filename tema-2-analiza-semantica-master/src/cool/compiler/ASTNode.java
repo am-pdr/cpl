@@ -333,20 +333,6 @@ class Neg extends Expression {
     }
 }
 
-class UnaryMinus extends Expression {
-    Expression expr;
-
-    UnaryMinus(ParserRuleContext ctx, Token token, Expression expr) {
-        super(ctx, token);
-        this.expr = expr;
-    }
-
-    @Override
-    public <T> T accept(ASTVisitor<T> visitor) {
-        return visitor.visit(this);
-    }
-}
-
 class BinaryOp extends Expression {
     String op;
     Expression left;

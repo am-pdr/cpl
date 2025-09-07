@@ -245,15 +245,6 @@ public class ASTPrintVisitor implements ASTVisitor<Void> {
     }
 
     @Override
-    public Void visit(UnaryMinus op) {
-        printIndentation("~");
-        indent++;
-        op.expr.accept(this);
-        indent--;
-        return null;
-    }
-
-    @Override
     public Void visit(Not notExpr) {
         printIndentation("not");
         indent++;
