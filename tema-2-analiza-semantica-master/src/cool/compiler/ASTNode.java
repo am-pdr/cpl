@@ -91,13 +91,13 @@ class Formal extends ASTNode {
 }
 
 class Local extends ASTNode {
-    Token name;
+    Id id;
     Token type;
     Expression init;
 
-    Local(ParserRuleContext ctx, Token token, Token name, Token type, Expression init) {
-        super(ctx, token);
-        this.name = name;
+    Local(ParserRuleContext ctx, Id id, Token type, Expression init) {
+        super(ctx, id.getToken());
+        this.id = id;
         this.type = type;
         this.init = init;
     }

@@ -194,45 +194,61 @@ public class RulesChecker {
         return true;
     }
 
+    // verificam ca tipul parametrului formal exista
+    public boolean checkFormalResolution(Formal formal) {
+        String methodName = ((MethodSymbol) formal.id.getSymbol().getScope()).getName();
+        String className = ((ClassSymbol) (formal.id.getSymbol().getScope().getParent())).getName();
+
+        // Method <m> of class <C> has formal parameter <f> with undefined type <T>
+        ClassSymbol type = (ClassSymbol) globals.lookup(formal.type.getText());
+        if (type == null) {
+            SymbolTable.error(formal.ctx, formal.type,
+                    "Method " + methodName + " of class " + className + " has formal parameter "
+                            + formal.id.token.getText() + " with undefined type " + formal.type.getText());
+            return false;
+        }
+        return true;
+    }
+
     // verificam ca metoda suprascrie corect o metoda mostenita (aceiasi parametri (nr si tip) si acelasi tip returnat)
-//    public boolean checkMethodOverride(Method method, MethodSymbol currentMethod, String className, String methodName) {
-//        ClassSymbol currentClass = (ClassSymbol) method.id.getSymbol().getScope();
-//
-//        while (currentClass != null) {
-//            MethodSymbol overriddenMethod = (MethodSymbol) currentClass.lookupMethod(methodName);
-//
-//            if (overriddenMethod != null) {
-//                String comparisonResult = overriddenMethod.compare(currentMethod);
-//
-//                // daca exista erori in numarul sau tipul parametrilor
-//                if (!comparisonResult.isEmpty()) {
-//                    if (comparisonResult.contains("number")) {
-//                        SymbolTable.error(method.ctx, method.token,
-//                                "Class " + className +
-//                                        " overrides method " + methodName +
-//                                        " with different number of formal parameters");
-//                    } else {
-//                        reportParameterTypeError(method, comparisonResult, className, methodName);
-//                    }
-//                    return false;
-//                }
-//
-//                // daca exista o incompatibilitate in tipul returnat
-//                if (!currentMethod.getType().getName().equals(overriddenMethod.getType().getName())) {
-//                    SymbolTable.error(method.ctx, method.returnType.token,
-//                            "Class " + className +
-//                                    " overrides method " + methodName +
-//                                    " but changes return type from " +
-//                                    overriddenMethod.getType().getName() + " to " +
-//                                    currentMethod.getType().getName());
-//                    return false;
-//                }
-//            }
-//            // trecem la clasa parinte pentru a verifica metodele acesteia
-//            currentClass = (ClassSymbol) globals.lookup(currentClass.getClassParent());
-//        }
-//        return true;
-//    }
+    public boolean checkMethodOverride(Method method, MethodSymbol currentMethod, String className, String methodName) {
+        ClassSymbol currentClass = (ClassSymbol) method.id.getSymbol().getScope();
+
+        while (currentClass != null) {
+            MethodSymbol overriddenMethod = (MethodSymbol) currentClass.lookupMethod(methodName);
+
+            if (overriddenMethod != null) {
+                String comparisonResult = overriddenMethod.compare(currentMethod);
+
+                // daca exista erori in numarul sau tipul parametrilor
+                if (!comparisonResult.isEmpty()) {
+                    if (comparisonResult.contains("number")) {
+                        SymbolTable.error(method.ctx, method.token,
+                                "Class " + className +
+                                        " overrides method " + methodName +
+                                        " with different number of formal parameters");
+                    } else {
+                        reportParameterTypeError(method, comparisonResult, className, methodName);
+                    }
+                    return false;
+                }
+
+                // daca exista o incompatibilitate in tipul returnat
+                if (!currentMethod.getType().getName().equals(overriddenMethod.getType().getName())) {
+                    SymbolTable.error(method.ctx, method.returnType,
+                            "Class " + className +
+                                    " overrides method " + methodName +
+                                    " but changes return type from " +
+                                    overriddenMethod.getType().getName() + " to " +
+                                    currentMethod.getType().getName());
+                    return false;
+                }
+            }
+            // trecem la clasa parinte pentru a verifica metodele acesteia
+            currentClass = (ClassSymbol) globals.lookup(currentClass.getParentName());
+        }
+        return true;
+    }
 
     // metoda care raporteaza o eroare in cazul unei metode suprascrise cu parametri de tip diferit
     public void reportParameterTypeError(Method method, String comparisonResult, String className, String methodName) {
@@ -251,5 +267,19 @@ public class RulesChecker {
                 return;
             }
         }
+    }
+
+    // verifica daca tipul intors de o metoda corespunde cu tipul declaray
+    public boolean isCompatibleReturnType(ClassSymbol declaredType, ClassSymbol actualType, Method method, String methodName) {
+        String commonParentName = getCommonParrent(declaredType, actualType, method.id.getSymbol().getScope()).getName();
+
+        if (!declaredType.getName().equals(commonParentName)) {
+            SymbolTable.error(method.ctx, method.body.getToken(),
+                    "Type " + actualType.getName() +
+                            " of the body of method " + methodName +
+                            " is incompatible with declared return type " + declaredType.getName());
+            return false;
+        }
+        return true;
     }
 }

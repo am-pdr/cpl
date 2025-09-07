@@ -19,6 +19,16 @@ public class ClassSymbol extends Symbol implements Scope {
         return parentName;
     }
 
+    public boolean hasAttribute(String name) {
+        return members.containsKey(name);
+    }
+
+    public boolean addAttribute(Symbol sym) {
+        if (hasAttribute(sym.getName())) return false;
+        members.put(sym.getName(), sym);
+        return true;
+    }
+
     @Override
     public boolean add(Symbol sym) {
         if (members.containsKey(sym.getName()))
@@ -46,6 +56,11 @@ public class ClassSymbol extends Symbol implements Scope {
         return parent;
     }
 
+    @Override
+    public Scope findScope(String str) {
+        return null;
+    }
+
     public boolean hasLocal(String name) {
         return members.containsKey(name);
     }
@@ -55,5 +70,13 @@ public class ClassSymbol extends Symbol implements Scope {
             return members.get(str);
 
         return null;
+    }
+
+    public boolean addMethod(Symbol sym) {
+        if (members.containsKey(sym.getName()))
+            return false;
+
+        members.put(sym.getName(), sym);
+        return true;
     }
 }

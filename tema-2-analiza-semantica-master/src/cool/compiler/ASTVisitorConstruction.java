@@ -45,7 +45,8 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         Token name = ctx.ID().getSymbol();
         Token type = ctx.TYPE().getSymbol();
         Expression init = ctx.expr() != null ? (Expression) visit(ctx.expr()) : null;
-        return new Local(ctx, ctx.getStart(), name, type, init);
+        Id id = new Id(ctx, name);
+        return new Local(ctx, id, type, init);
     }
 
     @Override

@@ -16,6 +16,7 @@ public class IdSymbol extends Symbol {
 
     public void setType(ClassSymbol t) { this.type = t; }
     public ClassSymbol getType() { return type; }
+
     public Scope getScope() {
         return scope;
     }

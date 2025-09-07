@@ -44,10 +44,9 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
         if(!validateChecks.checkFormalDefinition(formal, currentScope))
             return null;
 
-        sym.setType(new ClassSymbol(formal.type.getText(), ""));
         sym.setScope(currentScope);
         currentScope.add(sym);
-        formal.id.accept(this);
+        formal.id.setSymbol(sym);
 
         return null;
     }
@@ -86,6 +85,24 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
 
     @Override
     public Void visit(Local local) {
+        // 1) nume ilegal: self
+        if ("self".equals(local.id.getToken().getText())) {
+            SymbolTable.error(local.ctx, local.id.getToken(),
+                    "Let variable has illegal name self");
+            return null; // nu mai continuăm pe acest local
+        }
+
+        // 2) declarăm simbolul și îl legăm de Id
+        IdSymbol sym = new IdSymbol(local.id.getToken().getText());
+        sym.setScope(currentScope);
+        currentScope.add(sym);
+        local.id.setSymbol(sym);
+
+        // 3) expresia de inițializare (dacă există) se vizitează în definition pass
+        //    doar pentru a parcurge AST-ul; tipurile le verificăm în resolution pass
+        if (local.init != null) {
+            local.init.accept(this);
+        }
 
         return null;
     }
@@ -93,28 +110,27 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
     @Override
     public Void visit(Method method) {
         MethodSymbol sym = new MethodSymbol(method.id.token.getText(), currentScope);
-        var cls = (ClassSymbol) currentScope;
-        var mName = method.id.token.getText();
-        // redefinition in the same class
+
+        // validam metoda definita
         if (!validateChecks.checkMethodDefinition(method, currentScope)) {
             return null;
         }
 
-        var mSym = new MethodSymbol(mName, cls, method.returnType.getText());
-        cls.add(mSym);
-        method.id.setSymbol(mSym);
+        // adaugam metoda definita in scope-ul curent si ii asociem un simbol
+        ((ClassSymbol) currentScope).addMethod(sym);
+        sym.setType(new ClassSymbol(method.returnType.getText(), ""));
+        sym.setScope(currentScope);
+        method.id.setSymbol(sym);
 
-        // 3) intrăm în scope-ul metodei și definim formalii (numai numele)
-        var old = currentScope;
-        currentScope = mSym;
+        // actualizam scopul curent ca fiind scopul metodei si parcurgem parametrii formali si expresia din interiorul
+        // metodei
+        currentScope = sym;
+        for (var formal :method.formals)
+            formal.accept(this);
+        method.body.accept(this);
 
-        for (var f : method.formals) {
-            f.accept(this);  // definim parametrii (doar numele și interdicțiile de nume)
-        }
-
-        // 4) corpul metodei rămâne pentru type-check, nu ai erori în testul 3 aici
-        currentScope = old;
-
+        // revenim la scope-ul initial
+        currentScope = currentScope.getParent();
         return null;
     }
 
@@ -170,20 +186,64 @@ public class DefinitionPassVisitor implements ASTVisitor<Void> {
     }
 
     @Override
-    public Void visit(Let letExpr) {
+    public Void visit(Let let) {
+        var saved = currentScope;
 
+        // scope-ul 'de bază' al lui let
+        Scope s = new DefaultScope(currentScope);
+
+        // pentru fiecare local facem: intrăm într-un scope nou, declarăm localul
+        for (var local : let.localVars) {
+            s = new DefaultScope(s);   // scope nou -> permite shadowing
+            currentScope = s;
+            local.accept(this);        // aici se face verificarea de nume 'self' și declararea simbolului
+        }
+
+        // corpul lui let se evaluează în ultimul scope (care le include pe toate anterioarele)
+        currentScope = s;
+        if (let.body != null) {
+            let.body.accept(this);
+        }
+
+        currentScope = saved;
         return null;
     }
 
     @Override
     public Void visit(Case caseExpr) {
+        // întâi evaluăm expresia "case x of ..." în scope-ul curent
+        if (caseExpr.expr != null)
+            caseExpr.expr.accept(this);
 
+        var saved = currentScope;
+
+        // fiecare ramură are propriul scope (nu se văd variabilele între ramuri)
+        for (var br : caseExpr.branches) {
+            currentScope = new DefaultScope(saved);
+            br.accept(this);       // declararea variabilei și verificarea de nume
+        }
+
+        currentScope = saved;
         return null;
     }
 
     @Override
     public Void visit(CaseBranch branch) {
+        // numele 'self' este interzis
+        if ("self".equals(branch.name.getText())) {
+            SymbolTable.error(branch.ctx, branch.name, "Case variable has illegal name self");
+            // nu declarăm simbolul pentru acest branch
+            return null;
+        }
 
+        // definim simbolul variabilei de ramură în scope-ul curent
+        IdSymbol sym = new IdSymbol(branch.name.getText());
+        sym.setScope(currentScope);
+        currentScope.add(sym);
+
+        // nu rezolvăm tipul aici; doar vizităm expresia ramurii (body-ul)
+        if (branch.expr != null)
+            branch.expr.accept(this);
         return null;
     }
 

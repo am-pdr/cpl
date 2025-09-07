@@ -1,10 +1,10 @@
 package cool.structures;
 import java.util.*;
 
-public class MethodSymbol extends Symbol implements Scope {
-    private final Scope parent;
-    private final Map<String, Symbol> parameters = new LinkedHashMap<>();
-    private ClassSymbol returnType;
+public class MethodSymbol extends IdSymbol implements Scope {
+    private Scope parent;
+    private Map<String, Symbol> parameters = new LinkedHashMap<>();
+    private String returnType;
 
     public MethodSymbol(String name, Scope parent) {
         super(name);
@@ -27,6 +27,10 @@ public class MethodSymbol extends Symbol implements Scope {
 
     public void setReturnType(String returnType) {
         this.returnType = returnType;
+    }
+
+    public void setParameters(Map<String, Symbol> parameters) {
+        this.parameters = parameters;
     }
 
     @Override
@@ -54,6 +58,11 @@ public class MethodSymbol extends Symbol implements Scope {
     @Override
     public cool.structures.Scope getParent() {
         return parent;
+    }
+
+    @Override
+    public Scope findScope(String str) {
+        return null;
     }
 
     public Symbol hasSymbol(String str) {

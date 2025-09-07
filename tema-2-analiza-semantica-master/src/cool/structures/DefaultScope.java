@@ -40,7 +40,12 @@ public class DefaultScope implements Scope {
     public Scope getParent() {
         return parent;
     }
-    
+
+    @Override
+    public Scope findScope(String str) {
+        return null;
+    }
+
     @Override
     public String toString() {
         return symbols.values().toString();

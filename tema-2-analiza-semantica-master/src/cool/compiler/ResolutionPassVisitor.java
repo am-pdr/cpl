@@ -9,7 +9,26 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     RulesChecker validateChecker = new RulesChecker();
     @Override
     public ClassSymbol visit(Id id) {
-        return null;
+        String name = id.token.getText();
+
+        // self e mereu definit: returnezi clasa curentă
+        if ("self".equals(name)) {
+            // urcă până găsești clasa (currentScope poate fi MethodSymbol / Block / etc.)
+            Scope s = currentScope;
+            while (s != null && !(s instanceof ClassSymbol)) {
+                s = s.getParent();
+            }
+            return (ClassSymbol) s;   // poate fi null doar dacă ai o structură ruptă
+        }
+
+        Symbol s = currentScope.lookup(name);
+        if (!(s instanceof IdSymbol)) {
+            // n-am găsit simbolul: eroare "Undefined identifier <name>"
+            SymbolTable.error(id.ctx, id.token, "Undefined identifier " + name);
+            return null;
+        }
+
+        return ((IdSymbol) s).getType(); // tipul variabilei
     }
 
     @Override
@@ -29,7 +48,22 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Formal formal) {
-        return null;
+        IdSymbol sym = formal.id.getSymbol();
+        if (sym == null)
+            return null;
+
+        Scope scope = formal.id.getSymbol().getScope();
+        if (scope == null) {
+            return null;
+        }
+
+        if (!validateChecker.checkFormalResolution(formal))
+            return null;
+
+        sym.setType((ClassSymbol) globals.lookup(formal.type.getText()));
+        formal.id.setSymbol(sym);
+
+        return (ClassSymbol) globals.lookup(formal.type.getText());
     }
 
     @Override
@@ -72,68 +106,83 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Local local) {
-        return null;
+        IdSymbol sym = local.id.getSymbol();
+        if (sym == null) return null; // dacă n-am reușit să definim în definition pass
+
+        // 1) tip declarat trebuie să existe
+        String typeName = local.type.getText();
+        ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
+        if (declared == null) {
+            // "Let variable x has undefined type C"
+            SymbolTable.error(local.ctx, local.type,
+                    "Let variable " + local.id.getToken().getText() +
+                            " has undefined type " + typeName);
+            return null;
+        }
+
+        // opțional: interzice SELF_TYPE în let (dacă tema o cere)
+        // if ("SELF_TYPE".equals(typeName)) { ... mesaj corespunzător ... }
+
+        sym.setType(declared);
+
+        // 2) dacă există inițializare, poți verifica compatibilitatea (opțional pentru testul 4)
+        if (local.init != null) {
+            ClassSymbol exprType = local.init.accept(this);
+            // dacă vrei, verifică LCA/compatibilitatea aici
+        }
+
+        return declared;
     }
 
     @Override
     public ClassSymbol visit(Method method) {
-        var cls = (ClassSymbol) currentScope;
-        var mName = method.id.token.getText();
-        var mSym  = method.id.getSymbol();
-
-        // 1) rezolvăm tipul returnat declarat
-        var declaredRet = (ClassSymbol) SymbolTable.globals.lookup(method.returnType.getText());
-        if (declaredRet == null) {
-            // (nu apare în testul 3, dar e corect să fie)
-            SymbolTable.error(method.ctx, method.returnType,
-                    "Class " + cls.getName() +
-                            " has method " + mName + " with undefined return type " +
-                            method.returnType.getText());
+        if (method.id.getSymbol() == null) {
             return null;
         }
-        mSym.setReturnType(declaredRet);
 
-        // 2) rezolvăm tipurile formale (și raportăm SELF_TYPE/undefined)
-        for (var f : method.formals) {
-            var pName = f.id.token.getText();
-            var tName = f.type.getText();
+        // obtinem simbolul metodei si informatii relevante despre clasa
+        MethodSymbol currentMethodSymbol = (MethodSymbol) ((ClassSymbol) method.id.getSymbol().getScope())
+                .lookupMethod(method.id.getToken().getText());
+        String methodName = method.id.getToken().getText();
+        String className = ((ClassSymbol) method.id.getSymbol().getScope()).getName();
+        ClassSymbol declaredReturnType = (ClassSymbol) globals.lookup(method.returnType.getText());
 
-            if ("SELF_TYPE".equals(tName)) {
-                SymbolTable.error(f.ctx, f.type,
-                        "Method " + mName + " of class " + cls.getName() +
-                                " has formal parameter " + pName + " with illegal type SELF_TYPE");
-                return null;
-            }
+        currentScope = currentMethodSymbol;
 
-            var pType = (ClassSymbol) SymbolTable.globals.lookup(tName);
-            if (pType == null) {
-                SymbolTable.error(f.ctx, f.type,
-                        "Method " + mName + " of class " + cls.getName() +
-                                " has formal parameter " + pName + " with undefined type " + tName);
-                return null;
-            }
-
-            // atașăm tipul pe simbolul parametrului
-            var idSym = f.id.getSymbol();
-            if (idSym != null) idSym.setType(pType);
-
-            // (opțional) ținem ordinea parametrilor pe MethodSymbol, dacă nu ai deja
-            //mSym.addParam(pName, idSym);
+        // verificam daca tipul de retur declarat exista
+        if (declaredReturnType == null) {
+            SymbolTable.error(method.ctx, method.returnType,
+                    "Class " + className +
+                            " has method " + methodName +
+                            " with undefined return type " + method.returnType.getText());
+            return null;
         }
 
-        // 3) verificăm override-ul împotriva primei metode cu același nume din lanțul de moștenire
-        var parent = (ClassSymbol) SymbolTable.globals.lookup(cls.getParentName());
-        MethodSymbol overridden = null;
-        while (parent != null && overridden == null) {
-            overridden = (MethodSymbol) parent.lookupMethod(mName);
-            if (overridden == null)
-                parent = (ClassSymbol) SymbolTable.globals.lookup(parent.getParentName());
+        currentMethodSymbol.setType(declaredReturnType);
+
+        // verificam parametrii metodei
+        for (var formal : method.formals) {
+            formal.accept(this);
         }
 
+        // verificam daca metoda suprascrie corect o metoda din clasele parinte
+        if (!validateChecker.checkMethodOverride(method, currentMethodSymbol, className, methodName)) {
+            return null;
+        }
 
+        // verificam corpul metodei
+        ClassSymbol actualReturnType = method.body.accept(this);
+        if (actualReturnType == null) {
+            return null;
+        }
 
-        // (corpul metodei nu produce erori în testul 3)
-        return declaredRet;
+        // verificam compatibilitatea tipului de retur declarat cu tipul real
+        if (!validateChecker.isCompatibleReturnType(declaredReturnType, actualReturnType, method, methodName)) {
+            return null;
+        }
+
+        currentScope = currentScope.getParent();
+        return actualReturnType;
     }
 
     @Override
@@ -194,18 +243,76 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     }
 
     @Override
-    public ClassSymbol visit(Let letExpr) {
-        return null;
+    public ClassSymbol visit(Let let) {
+        var saved = currentScope;
+
+        // exact aceeași topologie de scope ca în DefinitionPass
+        Scope s = new DefaultScope(currentScope);
+        for (var local : let.localVars) {
+            s = new DefaultScope(s);
+            currentScope = s;
+            local.accept(this);   // aici se va da "undefined type" pentru C
+        }
+
+        currentScope = s;
+        ClassSymbol bodyType = let.body != null ? let.body.accept(this) : null;
+
+        currentScope = saved;
+        return bodyType;
     }
 
     @Override
     public ClassSymbol visit(Case caseExpr) {
-        return null;
+        var saved = currentScope;
+
+        ClassSymbol scrutineeType = caseExpr.expr != null ? caseExpr.expr.accept(this) : null;
+
+        ClassSymbol resultType = null;
+        for (var br : caseExpr.branches) {
+            currentScope = new DefaultScope(saved);
+            ClassSymbol t = br.accept(this);      // tipul expresiei din ramură
+            if (t != null) {
+                resultType = (resultType == null) ? t
+                        : validateChecker.getCommonParrent(resultType, t, saved);
+            }
+        }
+
+        currentScope = saved;
+        return resultType;
     }
 
     @Override
     public ClassSymbol visit(CaseBranch branch) {
-        return null;
+        // dacă în DefinitionPass nu s-a creat simbol (ex. nume 'self'), ieșim
+        Symbol idSym = (currentScope != null) ? currentScope.lookup(branch.name.getText()) : null;
+        if (!(idSym instanceof IdSymbol)) {
+            // nimic de rezolvat pentru variabila ramurii
+            return (branch.expr != null) ? branch.expr.accept(this) : null;
+        }
+
+        String typeName = branch.type.getText();
+
+        // 1) SELF_TYPE este ilegal în 'case'
+        if ("SELF_TYPE".equals(typeName)) {
+            SymbolTable.error(branch.ctx, branch.type,
+                    "Case variable " + branch.name.getText() + " has illegal type SELF_TYPE");
+            // nu setăm tipul; evaluăm totuși expr. pentru a continua analiza
+            return (branch.expr != null) ? branch.expr.accept(this) : null;
+        }
+
+        // 2) tip nedefinit
+        ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
+        if (declared == null) {
+            SymbolTable.error(branch.ctx, branch.type,
+                    "Case variable " + branch.name.getText() + " has undefined type " + typeName);
+            return (branch.expr != null) ? branch.expr.accept(this) : null;
+        }
+
+        // atașăm tipul variabilei ramurii
+        ((IdSymbol) idSym).setType(declared);
+
+        // tipul întors din ramură este tipul expresiei corpului ramurii
+        return (branch.expr != null) ? branch.expr.accept(this) : declared;
     }
 
     @Override
