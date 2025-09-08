@@ -60,13 +60,7 @@ public class MethodSymbol extends IdSymbol implements Scope {
         return parent;
     }
 
-    @Override
-    public Scope findScope(String str) {
-        return null;
-    }
-
     public Symbol hasSymbol(String str) {
-
         if (parameters.containsKey(str))
             return parameters.get(str);
 
@@ -79,7 +73,6 @@ public class MethodSymbol extends IdSymbol implements Scope {
             return "with different number of formal parameters";
         }
 
-        // Parcurgem in paralel parametrii pentru comparare
         List<String> thisParamNames = new ArrayList<>(this.parameters.keySet());
         List<String> otherParamNames = new ArrayList<>(other.parameters.keySet());
 
@@ -87,11 +80,10 @@ public class MethodSymbol extends IdSymbol implements Scope {
             String paramName1 = thisParamNames.get(i);
             String paramName2 = otherParamNames.get(i);
 
-            // Obținem simbolurile parametrilor
             IdSymbol thisParam = (IdSymbol) this.parameters.get(paramName1);
             IdSymbol otherParam = (IdSymbol) other.parameters.get(paramName2);
 
-            // Comparam tipurile parametrilor
+            // compare types of parameters
             if (thisParam.getType() != null && otherParam.getType() != null) {
                 if (!(thisParam.getType().getName().equals(otherParam.getType().getName()))) {
                     return paramName2 + " " + thisParam.getType().getName() + " " + otherParam.getType().getName();

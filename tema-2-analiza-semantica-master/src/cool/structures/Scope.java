@@ -6,6 +6,4 @@ public interface Scope {
     public Symbol lookup(String str);
     
     public Scope getParent();
-
-    public Scope findScope(String str);
 }

@@ -16,7 +16,6 @@ public class ClassSymbol extends Symbol implements Scope {
     public String getParentName() { return parentName; }
     public void setParentName(String parentName) { this.parentName = parentName; }
 
-    // --- ATRIBUTE ---
     public boolean hasAttribute(String name) { return attributes.containsKey(name); }
 
     public boolean addAttribute(Symbol sym) {
@@ -25,13 +24,11 @@ public class ClassSymbol extends Symbol implements Scope {
         return true;
     }
 
-    // Scope.add() pentru atribute (variabile de clasa)
     @Override
     public boolean add(Symbol sym) {
         return addAttribute(sym);
     }
 
-    // lookup pentru IDENTIFICATORI (variabile/atribute), nu pentru metode
     @Override
     public Symbol lookup(String name) {
         var sym = attributes.get(name);
@@ -42,14 +39,6 @@ public class ClassSymbol extends Symbol implements Scope {
 
     @Override
     public Scope getParent() { return parent; }
-
-    @Override
-    public Scope findScope(String str) { return null; }
-
-    public boolean hasLocal(String name) { return attributes.containsKey(name); }
-
-    // --- METODE ---
-    public Symbol lookupMethodLocal(String name) { return methods.get(name); }
 
     public Symbol lookupMethod(String name) {
         var m = methods.get(name);

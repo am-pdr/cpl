@@ -58,12 +58,6 @@ public class RulesChecker {
         return true;
     }
 
-    // check the name of attribute (var) has not self and redefinition
-    public boolean checkAttributeDefinition(Class classs, Attr currentFeature, Scope currentScope) {
-        return false;
-    }
-
-    // check inheritance cycle
     public boolean checkInheritanceCycle(Class classs) {
         String name = classs.type.getText();
         Token parent = classs.inherit;
@@ -81,7 +75,6 @@ public class RulesChecker {
         return true;
     }
 
-    // returns the common parent from 2 classes
     public ClassSymbol getCommonParrent(ClassSymbol c1, ClassSymbol c2, Scope currentScope) {
         while (!(currentScope instanceof ClassSymbol)) {
             if (currentScope == null)
@@ -93,12 +86,10 @@ public class RulesChecker {
             return null;
         }
 
-        // if the class identical return the current class
         if (c1.getName().equals(c2.getName())) {
             return c1;
         }
 
-        // if SELF_TYPE, returns current class
         if (c1.getName().equals("SELF_TYPE")) {
             c1 = (ClassSymbol) currentScope;
         }
@@ -107,7 +98,6 @@ public class RulesChecker {
             c2 = (ClassSymbol) currentScope;
         }
 
-        // set class parents (c1)
         Set<String> ancestorsOfC1 = new HashSet<>();
         ClassSymbol current = c1;
 
@@ -116,7 +106,6 @@ public class RulesChecker {
             current = (ClassSymbol) globals.lookup(current.getParentName());
         }
 
-        // looking for first parent from common class parents of c2
         current = c2;
         while (current != null) {
             if (ancestorsOfC1.contains(current.getName())) {
@@ -125,7 +114,6 @@ public class RulesChecker {
             current = (ClassSymbol) globals.lookup(current.getParentName());
         }
 
-        // if not found common parent, returns the base class Object
         return (ClassSymbol) globals.lookup("Object");
     }
 
@@ -149,8 +137,6 @@ public class RulesChecker {
         return true;
     }
 
-    // method definition validation
-    // verificam ca o metoda cu acelasi nume nu a fost definita anterior
     public boolean checkMethodDefinition(Method method, Scope currentScope) {
         if (currentScope instanceof ClassSymbol) {
             Symbol sym = ((ClassSymbol) currentScope).lookupMethod(method.id.token.getText());
@@ -164,27 +150,22 @@ public class RulesChecker {
         return true;
     }
 
-    // methods for formal validation
-    // verifica definirea corecta a unui parametru formal (nume si tip)
     public boolean checkFormalDefinition(Formal formal, Scope currentScope) {
         String methodName = ((MethodSymbol) currentScope).getName();
         String className = ((ClassSymbol) currentScope.getParent()).getName();
 
-        // Method <m> of class <C> has formal parameter with illegal name self
         if (formal.id.token.getText().equals("self")) {
             SymbolTable.error(formal.ctx, formal.token, "Method " + methodName + " of class " + className +
                     " has formal parameter with illegal name self");
             return false;
         }
 
-        // Method <m> of class <C> redefines formal parameter <f>
         if (((MethodSymbol) currentScope).hasSymbol(formal.id.token.getText()) != null) {
             SymbolTable.error(formal.ctx, formal.token, "Method " + methodName + " of class " + className
                     + " redefines formal parameter " + formal.id.token.getText());
             return false;
         }
 
-        // Method <m> of class <C> has formal parameter <f> with illegal type SELF_TYPE
         if (formal.type.getText().equals("SELF_TYPE")) {
             SymbolTable.error(formal.ctx, formal.type, "Method " + methodName + " of class " + className +
                     " has formal parameter " + formal.id.token.getText() + " with illegal type SELF_TYPE");
@@ -194,12 +175,10 @@ public class RulesChecker {
         return true;
     }
 
-    // verificam ca tipul parametrului formal exista
     public boolean checkFormalResolution(Formal formal) {
         String methodName = ((MethodSymbol) formal.id.getSymbol().getScope()).getName();
         String className = ((ClassSymbol) (formal.id.getSymbol().getScope().getParent())).getName();
 
-        // Method <m> of class <C> has formal parameter <f> with undefined type <T>
         ClassSymbol type = (ClassSymbol) globals.lookup(formal.type.getText());
         if (type == null) {
             SymbolTable.error(formal.ctx, formal.type,
@@ -210,7 +189,6 @@ public class RulesChecker {
         return true;
     }
 
-    // verificam ca metoda suprascrie corect o metoda mostenita (aceiasi parametri (nr si tip) si acelasi tip returnat)
     public boolean checkMethodOverride(Method method, MethodSymbol currentMethod, String className, String methodName) {
         ClassSymbol currentClass = (ClassSymbol) method.id.getSymbol().getScope();
 
@@ -220,7 +198,6 @@ public class RulesChecker {
             if (overriddenMethod != null) {
                 String comparisonResult = overriddenMethod.compare(currentMethod);
 
-                // daca exista erori in numarul sau tipul parametrilor
                 if (!comparisonResult.isEmpty()) {
                     if (comparisonResult.contains("number")) {
                         SymbolTable.error(method.ctx, method.token,
@@ -233,7 +210,6 @@ public class RulesChecker {
                     return false;
                 }
 
-                // daca exista o incompatibilitate in tipul returnat
                 if (!currentMethod.getType().getName().equals(overriddenMethod.getType().getName())) {
                     SymbolTable.error(method.ctx, method.returnType,
                             "Class " + className +
@@ -244,13 +220,11 @@ public class RulesChecker {
                     return false;
                 }
             }
-            // trecem la clasa parinte pentru a verifica metodele acesteia
             currentClass = (ClassSymbol) globals.lookup(currentClass.getParentName());
         }
         return true;
     }
 
-    // metoda care raporteaza o eroare in cazul unei metode suprascrise cu parametri de tip diferit
     public void reportParameterTypeError(Method method, String comparisonResult, String className, String methodName) {
         String[] tokens = comparisonResult.split(" ");
         String paramName = tokens[0];
@@ -269,7 +243,6 @@ public class RulesChecker {
         }
     }
 
-    // verifica daca tipul intors de o metoda corespunde cu tipul declaray
     public boolean isCompatibleReturnType(ClassSymbol declaredType, ClassSymbol actualType, Method method, String methodName) {
         String commonParentName = getCommonParrent(declaredType, actualType, method.id.getSymbol().getScope()).getName();
 

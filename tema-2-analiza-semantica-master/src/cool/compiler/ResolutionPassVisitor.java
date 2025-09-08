@@ -20,24 +20,21 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     public ClassSymbol visit(Id id) {
         String name = id.token.getText();
 
-        // self e mereu definit: returnezi clasa curentă
         if ("self".equals(name)) {
-            // urcă până găsești clasa (currentScope poate fi MethodSymbol / Block / etc.)
             Scope s = currentScope;
             while (s != null && !(s instanceof ClassSymbol)) {
                 s = s.getParent();
             }
-            return (ClassSymbol) s;   // poate fi null doar dacă ai o structură ruptă
+            return (ClassSymbol) s;
         }
 
         Symbol s = currentScope.lookup(name);
         if (!(s instanceof IdSymbol)) {
-            // n-am găsit simbolul: eroare "Undefined identifier <name>"
             SymbolTable.error(id.ctx, id.token, "Undefined identifier " + name);
             return null;
         }
 
-        return ((IdSymbol) s).getType(); // tipul variabilei
+        return ((IdSymbol) s).getType();
     }
 
     @Override
@@ -94,7 +91,6 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
         var clsSym = (ClassSymbol) globals.lookup(classs.type.getText());
         if (clsSym == null) return null;
 
-        // aici faci și legarea moștenirii + detectare cicluri, dacă n-ai făcut-o deja
         var old = currentScope;
         currentScope = clsSym;
 
@@ -116,28 +112,23 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     @Override
     public ClassSymbol visit(Local local) {
         IdSymbol sym = local.id.getSymbol();
-        if (sym == null) return null; // dacă n-am reușit să definim în definition pass
+        if (sym == null)
+            return null;
 
-        // 1) tip declarat trebuie să existe
+        // undefined type
         String typeName = local.type.getText();
         ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
         if (declared == null) {
-            // "Let variable x has undefined type C"
             SymbolTable.error(local.ctx, local.type,
                     "Let variable " + local.id.getToken().getText() +
                             " has undefined type " + typeName);
             return null;
         }
 
-        // opțional: interzice SELF_TYPE în let (dacă tema o cere)
-        // if ("SELF_TYPE".equals(typeName)) { ... mesaj corespunzător ... }
-
         sym.setType(declared);
 
-        // 2) dacă există inițializare, poți verifica compatibilitatea (opțional pentru testul 4)
         if (local.init != null) {
             ClassSymbol exprType = local.init.accept(this);
-            // dacă vrei, verifică LCA/compatibilitatea aici
         }
 
         return declared;
@@ -149,7 +140,6 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             return null;
         }
 
-        // obtinem simbolul metodei si informatii relevante despre clasa
         MethodSymbol currentMethodSymbol = (MethodSymbol) ((ClassSymbol) method.id.getSymbol().getScope())
                 .lookupMethod(method.id.getToken().getText());
         String methodName = method.id.getToken().getText();
@@ -158,7 +148,7 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
         currentScope = currentMethodSymbol;
 
-        // verificam daca tipul de retur declarat exista
+        // check return type exists
         if (declaredReturnType == null) {
             SymbolTable.error(method.ctx, method.returnType,
                     "Class " + className +
@@ -169,23 +159,21 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
         currentMethodSymbol.setType(declaredReturnType);
 
-        // verificam parametrii metodei
+        // check params of method
         for (var formal : method.formals) {
             formal.accept(this);
         }
 
-        // verificam daca metoda suprascrie corect o metoda din clasele parinte
+        // override method in parent classes
         if (!validateChecker.checkMethodOverride(method, currentMethodSymbol, className, methodName)) {
             return null;
         }
 
-        // verificam corpul metodei
         ClassSymbol actualReturnType = method.body.accept(this);
         if (actualReturnType == null) {
             return null;
         }
 
-        // verificam compatibilitatea tipului de retur declarat cu tipul real
         if (!validateChecker.isCompatibleReturnType(declaredReturnType, actualReturnType, method, methodName)) {
             return null;
         }
@@ -196,10 +184,11 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(Attr attr) {
-        // daca tipul atributului este definit, asociem simbolul clasei respective la tipul simbolului variabilei
+        // redefinition of attr
         if (!validateChecker.checkAttributeResolution(attr))
             return null;
 
+        // undefined class
         String typeName = attr.type.getText();
         var declared = (ClassSymbol) globals.lookup(typeName);
         if (declared == null) {
@@ -210,15 +199,13 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             return null;
         }
 
-        // 2) setează tipul pe simbolul variabilei
         var idSym = attr.id.getSymbol();
         if (idSym != null) {
             idSym.setType(declared);
         }
 
-        // 3) dacă există expresie de inițializare, verifică compatibilitatea
         if (attr.init != null) {
-            ClassSymbol exprType = attr.init.accept(this);
+            ClassSymbol exprType = attr.init.accept(this); // type of expr
             if (exprType != null) {
                     var lca = validateChecker.getCommonParrent(declared, exprType, currentScope);
                 if (lca == null || !lca.getName().equals(declared.getName())) {
@@ -258,11 +245,11 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
         Scope s = currentScope;
 
         for (var local : let.localVars) {
-            // 1) evaluăm init în scopul curent (fără variabila nouă)
             currentScope = s;
-            if (local.init != null) local.init.accept(this);
+            if (local.init != null)
+                local.init.accept(this);
 
-            // 2) rezolvăm tipul declarat (doar pt. mesajele "undefined type")
+            // undefined type for local
             String typeName = local.type.getText();
             ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
             if (declared == null) {
@@ -271,7 +258,6 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
                                 " has undefined type " + typeName);
             }
 
-            // 3) abia acum introducem variabila într-un scope nou
             Scope newScope = new DefaultScope(s);
             currentScope = newScope;
 
@@ -285,7 +271,6 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             s = newScope;
         }
 
-        // 4) corpul se evaluează în ultimul scope
         currentScope = s;
         ClassSymbol bodyType = (let.body != null) ? let.body.accept(this) : null;
 
@@ -297,12 +282,10 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     public ClassSymbol visit(Case caseExpr) {
         var saved = currentScope;
 
-        ClassSymbol scrutineeType = caseExpr.expr != null ? caseExpr.expr.accept(this) : null;
-
         ClassSymbol resultType = null;
         for (var br : caseExpr.branches) {
             currentScope = new DefaultScope(saved);
-            ClassSymbol t = br.accept(this);      // tipul expresiei din ramură
+            ClassSymbol t = br.accept(this);
             if (t != null) {
                 resultType = (resultType == null) ? t
                         : validateChecker.getCommonParrent(resultType, t, saved);
@@ -315,24 +298,22 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
 
     @Override
     public ClassSymbol visit(CaseBranch branch) {
-        // dacă în DefinitionPass nu s-a creat simbol (ex. nume 'self'), ieșim
         Symbol idSym = (currentScope != null) ? currentScope.lookup(branch.name.getText()) : null;
         if (!(idSym instanceof IdSymbol)) {
-            // nimic de rezolvat pentru variabila ramurii
             return (branch.expr != null) ? branch.expr.accept(this) : null;
         }
 
         String typeName = branch.type.getText();
 
-        // 1) SELF_TYPE este ilegal în 'case'
+        // illegal type SELF_TYPE
         if ("SELF_TYPE".equals(typeName)) {
             SymbolTable.error(branch.ctx, branch.type,
                     "Case variable " + branch.name.getText() + " has illegal type SELF_TYPE");
-            // nu setăm tipul; evaluăm totuși expr. pentru a continua analiza
+            // evaluate the expression
             return (branch.expr != null) ? branch.expr.accept(this) : null;
         }
 
-        // 2) tip nedefinit
+        // undefined type
         ClassSymbol declared = (ClassSymbol) globals.lookup(typeName);
         if (declared == null) {
             SymbolTable.error(branch.ctx, branch.type,
@@ -340,10 +321,8 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             return (branch.expr != null) ? branch.expr.accept(this) : null;
         }
 
-        // atașăm tipul variabilei ramurii
         ((IdSymbol) idSym).setType(declared);
 
-        // tipul întors din ramură este tipul expresiei corpului ramurii
         return (branch.expr != null) ? branch.expr.accept(this) : declared;
     }
 
@@ -351,43 +330,41 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
     public ClassSymbol visit(Assign assign) {
         String lhsName = assign.name.getText();
 
-        // 1) self <- ...
+        // assign to self
         if ("self".equals(lhsName)) {
             SymbolTable.error(assign.ctx, assign.name, "Cannot assign to self");
-            // tot vizităm dreapta ca să generăm erori din interior, dacă sunt
             return (assign.expr != null) ? assign.expr.accept(this) : null;
         }
 
-        // 2) rezolvă identificatorul din stânga
+        // check the left var
         Symbol s = currentScope.lookup(lhsName);
         if (!(s instanceof IdSymbol)) {
             SymbolTable.error(assign.ctx, assign.name, "Undefined identifier " + lhsName);
-            if (assign.expr != null) assign.expr.accept(this);
+            if (assign.expr != null)
+                assign.expr.accept(this);
             return null;
         }
 
         IdSymbol idSym = (IdSymbol) s;
+        // left
         ClassSymbol declared = idSym.getType();
 
-        // 3) tipul expresiei din dreapta
+        // rigth
         ClassSymbol rhs = (assign.expr != null) ? assign.expr.accept(this) : null;
 
-        // dacă nu avem tipuri (deja s-au raportat alte erori), ne oprim elegant
         if (declared == null || rhs == null) {
             return rhs;
         }
 
-        // 4) compatibilitate: RHS trebuie să fie subtip al LHS
+        // compatibility right should be subtype of left
         ClassSymbol lca = validateChecker.getCommonParrent(declared, rhs, currentScope);
         if (lca == null || !declared.getName().equals(lca.getName())) {
-            // raportează pe tokenul expresiei din dreapta (exact ca în referință)
             SymbolTable.error(assign.ctx, assign.expr.getToken(),
                     "Type " + rhs.getName() +
                             " of assigned expression is incompatible with declared type " +
                             declared.getName() + " of identifier " + lhsName);
         }
 
-        // 5) tipul unei atribuiri este tipul expresiei din dreapta
         return rhs;
     }
 
@@ -420,7 +397,7 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             return INT();
         }
 
-        // < și <= : ambii Int, rezultat Bool
+        // < <=
         if (sop.equals("<") || sop.equals("<=")) {
             if (lt != null && !isInt(lt)) {
                 SymbolTable.error(op.ctx, op.left.getToken(),
@@ -433,7 +410,7 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
             return BOOL();
         }
 
-        // = : dacă oricare operand e tip de bază, ambele trebuie să fie ACELAȘI tip de bază
+        // = should be the same type
         if (sop.equals("=")) {
             boolean lb = isBasic(lt), rb = isBasic(rt);
             if (lb || rb) {
@@ -441,17 +418,14 @@ public class ResolutionPassVisitor implements ASTVisitor<ClassSymbol> {
                         (isBool(lt) && isBool(rt)) ||
                         (isStr(lt) && isStr(rt));
                 if (!ok) {
-                    // plasăm eroarea pe începutul expresiei (merge și pe left.getToken())
                     SymbolTable.error(op.ctx, op.getToken(),
                             "Cannot compare " + (lt == null ? "Object" : lt.getName()) +
                                     " with " + (rt == null ? "Object" : rt.getName()));
                 }
             }
-            // pentru tipuri non-basic (A,B etc.) e permis; rezultatul e Bool
             return BOOL();
         }
 
-        // fallback (nu ar trebui folosit la 07–08)
         return INT();
     }
 

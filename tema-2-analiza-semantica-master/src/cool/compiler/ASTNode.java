@@ -14,10 +14,6 @@ public abstract class ASTNode {
         return symbol;
     }
 
-    public void setSymbol(Symbol symbol) {
-        this.symbol = symbol;
-    }
-
     ASTNode(ParserRuleContext ctx, Token token)  {
         this.ctx = ctx;
         this.token = token;
@@ -26,7 +22,6 @@ public abstract class ASTNode {
     Token getToken() {
         return token;
     }
-    ParserRuleContext getCtx() { return ctx; }
 
     public <T> T accept(ASTVisitor<T> visitor) {
         return null;
@@ -335,11 +330,10 @@ class Neg extends Expression {
 
 class BinaryOp extends Expression {
     String op;
-    Expression left;
-    Expression right;
+    Expression left, right;
 
-    BinaryOp(ParserRuleContext ctx, Token token, Expression left, String op, Expression right) {
-        super(ctx, token);
+    BinaryOp(ParserRuleContext ctx, Token opTok, Expression left, String op, Expression right) {
+        super(ctx, opTok);
         this.left = left;
         this.op = op;
         this.right = right;

@@ -94,26 +94,31 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
 
     @Override
     public ASTNode visitMulDiv(CoolParser.MulDivContext ctx) {
-        Expression l = (Expression) visit(ctx.expr(0));
-        Expression r = (Expression) visit(ctx.expr(1));
+        var l = (Expression) visit(ctx.left);
+        var r = (Expression) visit(ctx.right);
         String op = (ctx.MULT()!=null) ? "*" : "/";
-        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+        Token opTok = (ctx.MULT()!=null) ? ctx.MULT().getSymbol() : ctx.DIV().getSymbol();
+        return new BinaryOp(ctx, opTok, l, op, r);
     }
 
     @Override
     public ASTNode visitAddSub(CoolParser.AddSubContext ctx) {
-        Expression l = (Expression) visit(ctx.expr(0));
-        Expression r = (Expression) visit(ctx.expr(1));
-        String op = (ctx.MINUS()!=null) ? "-" : "+";
-        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+        var l = (Expression) visit(ctx.left);
+        var r = (Expression) visit(ctx.right);
+        String op = (ctx.PLUS()!=null) ? "+" : "-";
+        Token opTok = (ctx.PLUS()!=null) ? ctx.PLUS().getSymbol() : ctx.MINUS().getSymbol();
+        return new BinaryOp(ctx, opTok, l, op, r);
     }
 
     @Override
     public ASTNode visitRelational(CoolParser.RelationalContext ctx) {
-        Expression l = (Expression) visit(ctx.expr(0));
-        Expression r = (Expression) visit(ctx.expr(1));
-        String op = ctx.LT()!=null ? "<" : (ctx.LE()!=null ? "<=" : "=");
-        return new BinaryOp(ctx, ctx.getStart(), l, op, r);
+        var l = (Expression) visit(ctx.left);
+        var r = (Expression) visit(ctx.right);
+        String op; Token opTok;
+        if (ctx.LT()!=null)      { op = "<";  opTok = ctx.LT().getSymbol(); }
+        else if (ctx.LE()!=null) { op = "<="; opTok = ctx.LE().getSymbol(); }
+        else                     { op = "=";  opTok = ctx.EQUAL().getSymbol(); }
+        return new BinaryOp(ctx, opTok, l, op, r);
     }
 
     @Override
@@ -153,7 +158,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new Assign(ctx, ctx.getStart(), name, value);
     }
 
-    // expr: target=expr (AT type=TYPE)? DOT id=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN  #staticDispatch
     @Override
     public ASTNode visitStaticDispatch(CoolParser.StaticDispatchContext ctx) {
         Expression caller = (Expression) visit(ctx.target);
@@ -167,7 +171,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new StaticDispatch(ctx, ctx.getStart(), caller, typeTok, methodName, args);
     }
 
-    // expr: name=ID LPAREN (args+=expr (COMMA args+=expr)*)? RPAREN  #dispatch
     @Override
     public ASTNode visitDispatch(CoolParser.DispatchContext ctx) {
         Token name = ctx.name;
@@ -178,7 +181,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new Dispatch(ctx, ctx.getStart(), name, args);
     }
 
-    // expr: IF cond=expr THEN thenBranch=expr ELSE elseBranch=expr FI  #ifExpr
     @Override
     public ASTNode visitIfExpr(CoolParser.IfExprContext ctx) {
         Expression cond = (Expression) visit(ctx.cond);
@@ -187,7 +189,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new If(ctx, cond, thenB, elseB, ctx.getStart());
     }
 
-    // expr: WHILE cond=expr LOOP whileBranch=expr POOL  #whileExpr
     @Override
     public ASTNode visitWhileExpr(CoolParser.WhileExprContext ctx) {
         Expression cond = (Expression) visit(ctx.cond);
@@ -195,13 +196,11 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new While(ctx, ctx.getStart(), cond, body);
     }
 
-    // expr: block  #blockExpr  (ai deja visitBlock(CoolParser.BlockContext) definit)
     @Override
     public ASTNode visitBlockExpr(CoolParser.BlockExprContext ctx) {
-        return visit(ctx.block()); // folosește constructorul tău existent de Block
+        return visit(ctx.block());
     }
 
-    // expr: LET localVars+=local (...) IN exp=expr  #letExpr
     @Override
     public ASTNode visitLetExpr(CoolParser.LetExprContext ctx) {
         List<Local> locals = new ArrayList<>();
@@ -210,7 +209,6 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new Let(ctx, ctx.getStart(), locals, body);
     }
 
-    // expr: CASE cond=expr OF (types+=formal RESULTS exprs+=expr SEMI)+ ESAC  #caseExpr
     @Override
     public ASTNode visitCaseExpr(CoolParser.CaseExprContext ctx) {
         Expression cond = (Expression) visit(ctx.cond);
@@ -223,13 +221,11 @@ public class ASTVisitorConstruction extends CoolParserBaseVisitor<ASTNode> {
         return new Case(ctx, ctx.getStart(), cond, branches);
     }
 
-    // expr: NEW type=TYPE  #newExpr
     @Override
     public ASTNode visitNewExpr(CoolParser.NewExprContext ctx) {
         return new New(ctx, ctx.getStart(), ctx.type);
     }
 
-    // expr: ISVOID e=expr  #isVoid
     @Override
     public ASTNode visitIsVoid(CoolParser.IsVoidContext ctx) {
         return new IsVoid(ctx, ctx.getStart(), (Expression) visit(ctx.e));

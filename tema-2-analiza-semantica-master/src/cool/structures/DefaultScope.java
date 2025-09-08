@@ -14,7 +14,6 @@ public class DefaultScope implements Scope {
 
     @Override
     public boolean add(Symbol sym) {
-        // Reject duplicates in the same scope.
         if (symbols.containsKey(sym.getName()))
             return false;
         
@@ -39,11 +38,6 @@ public class DefaultScope implements Scope {
     @Override
     public Scope getParent() {
         return parent;
-    }
-
-    @Override
-    public Scope findScope(String str) {
-        return null;
     }
 
     @Override
